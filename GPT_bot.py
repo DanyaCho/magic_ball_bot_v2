@@ -63,12 +63,6 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["mode"] = "magic_ball"
     await update.message.reply_text("Режим Магического шара активирован. Задавайте вопросы.")
 
-# Команда "медитация" (скрытый режим)
-async def meditation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["mode"] = "meditation"
-    context.user_data["meditation_step"] = 0
-    await update.message.reply_text("Скрытый режим активирован. Сосредоточьтесь.")
-
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, user_id, context):
     now = datetime.now()
@@ -126,7 +120,7 @@ async def generate_oracle_response(question):
 
 # Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
+    user_message = update.message.text.lower()
 
     # Скрытый режим "медитация"
     if context.user_data.get("mode") == "meditation":
@@ -142,11 +136,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(response)
             return
 
+    # Активация скрытого режима
+    if user_message == "медитация":
+        context.user_data["mode"] = "meditation"
+        context.user_data["meditation_step"] = 0
+        await update.message.reply_text("Скрытый режим активирован. Сосредоточьтесь.")
+        return
+
     # Обычные режимы
-    if user_message == "Магический шар":
+    if user_message == "магический шар":
         context.user_data["mode"] = "magic_ball"
         await update.message.reply_text("Вы выбрали режим Магического шара. Задавайте вопросы.")
-    elif user_message == "Оракул":
+    elif user_message == "оракул":
         context.user_data["mode"] = "oracle"
         await update.message.reply_text("Вы выбрали режим Оракула. Задавайте вопросы.")
     else:
@@ -163,8 +164,7 @@ async def set_commands(application):
     commands = [
         BotCommand("start", "Запустить бота"),
         BotCommand("oracle", "Режим Оракула"),
-        BotCommand("magicball", "Режим Магического шара"),
-        BotCommand("meditation", "Скрытый режим медитации")
+        BotCommand("magicball", "Режим Магического шара")
     ]
     await application.bot.set_my_commands(commands)
 
@@ -177,7 +177,6 @@ def main():
     job_queue.run_once(lambda _: set_commands(application), 0)
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("meditation", meditation))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Запуск polling с обработкой исключений
