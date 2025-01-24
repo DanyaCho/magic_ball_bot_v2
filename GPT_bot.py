@@ -1,6 +1,6 @@
 import random
 from datetime import datetime
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import openai
 from dotenv import load_dotenv
@@ -47,6 +47,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Привет! Выберите режим: Оракул или Магический шар.", reply_markup=reply_markup
     )
     context.user_data.clear()  # Сброс контекста для пользователя при запуске
+
+# Команда /oracle
+async def oracle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["mode"] = "oracle"
+    await update.message.reply_text("Режим Оракула активирован. Задавайте вопросы.")
+
+# Команда /magicball
+async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["mode"] = "magic_ball"
+    await update.message.reply_text("Режим Магического шара активирован. Задавайте вопросы.")
 
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, user_id, context):
@@ -122,11 +132,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(response)
 
+# Настройка команд меню
+async def set_commands(application):
+    commands = [
+        BotCommand("start", "Запустить бота"),
+        BotCommand("oracle", "Режим Оракула"),
+        BotCommand("magicball", "Режим Магического шара"),
+    ]
+    await application.bot.set_my_commands(commands)
+
 # Настройка бота
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
+    # Установка команд меню
+    application.job_queue.run_once(lambda _: set_commands(application), 0)
+
+    # Добавление обработчиков
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("oracle", oracle))
+    application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Запуск polling с обработкой исключений
