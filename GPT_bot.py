@@ -145,13 +145,11 @@ async def set_commands(application):
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Установка команд меню
-    application.job_queue.run_once(lambda _: set_commands(application), 0)
+    # Создаем JobQueue и добавляем задачу для установки команд
+    job_queue = application.job_queue
+    job_queue.run_once(lambda _: set_commands(application), 0)
 
-    # Добавление обработчиков
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("oracle", oracle))
-    application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Запуск polling с обработкой исключений
