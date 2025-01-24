@@ -1,7 +1,6 @@
 #!/bin/bash
+# Активируем виртуальную среду Render
+source .venv/bin/activate
 
-# Активация виртуального окружения
-source venv/bin/activate
-
-# Запуск сервера Hypercorn
-hypercorn bot:app --bind 0.0.0.0:${PORT}
+# Запускаем бота
+python3 GPT_bot.py
