@@ -1,10 +1,11 @@
 import random
 from datetime import datetime
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import openai
 from dotenv import load_dotenv
 import os
+import logging
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -14,53 +15,52 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # Установка ключа OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# История вопросов (контекст с временными метками)
-user_context = {}
+# Настройка логирования
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 
 # Пулы ответов для Магического Шара
 NEGATIVE_RESPONSES = [
-    "Нет.", "Не стоит.", "Думаю, хватит.", 
-    "Я уже сказал нет.", "Определенно нет.", 
+    "Нет.", "Не стоит.", "Думаю, хватит.",
+    "Я уже сказал нет.", "Определенно нет.",
     "Хватит уже."
 ]
 POSITIVE_RESPONSES = [
-    "Да!", "Почему бы нет?", "Конечно!", 
+    "Да!", "Почему бы нет?", "Конечно!",
     "Давай!", "Определенно."
 ]
 NEUTRAL_RESPONSES = [
-    "Может быть.", "Зависит от ситуации.", 
+    "Может быть.", "Зависит от ситуации.",
     "Сложно сказать.", "Тебе решать."
 ]
 EXTRA_RESPONSES = [
-    "Подумай еще раз.", "Решение за тобой.", 
+    "Подумай еще раз.", "Решение за тобой.",
     "Ты сам знаешь ответ."
 ]
 
 # Команда /start
-async def start(update: Update, context):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     buttons = [[KeyboardButton("Оракул"), KeyboardButton("Магический шар")]]
     reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
     await update.message.reply_text(
         "Привет! Выберите режим: Оракул или Магический шар.", reply_markup=reply_markup
     )
+    context.user_data.clear()  # Сброс контекста для пользователя при запуске
 
 # Генерация ответа для Магического Шара
-async def generate_magic_ball_response(question, user_id):
+async def generate_magic_ball_response(question, user_id, context):
     now = datetime.now()
 
     # Очистка контекста через день
-    if user_id in user_context:
-        if now.date() != user_context[user_id]["date"]:
-            del user_context[user_id]
+    if "last_interaction_date" in context.user_data:
+        last_date = context.user_data["last_interaction_date"]
+        if now.date() != last_date:
+            context.user_data.clear()
 
-    # Если есть контекст
-    if user_id in user_context:
-        last_question = user_context[user_id]["last_question"]
-        last_response = user_context[user_id]["last_response"]
-
-        # Если вопрос связан с предыдущим
-        if question.lower() in ["точно?", "или?", "правда?", "ты уверен?"]:
-            return f"{last_response} (я повторяю)."
+    # Если вопрос повторный
+    if "last_question" in context.user_data and question.lower() in ["точно?", "или?", "правда?", "ты уверен?"]:
+        return f"{context.user_data['last_response']} (я повторяю)."
 
     # Генерация нового ответа
     chosen_tone = random.choice(["негативный", "позитивный", "нейтральный"])
@@ -76,11 +76,10 @@ async def generate_magic_ball_response(question, user_id):
         response += " " + random.choice(EXTRA_RESPONSES)
 
     # Сохранение контекста
-    user_context[user_id] = {
-        "last_question": question.lower(),
-        "last_response": response,
-        "date": now.date(),
-    }
+    context.user_data["last_question"] = question.lower()
+    context.user_data["last_response"] = response
+    context.user_data["last_interaction_date"] = now.date()
+
     return response
 
 # Генерация ответа для Оракула
@@ -100,14 +99,13 @@ async def generate_oracle_response(question):
         )
         response = openai_response["choices"][0]["message"]["content"]
         return response.strip()
-    except Exception as e:
-        print(f"Ошибка OpenAI: {e}")
+    except openai.error.OpenAIError as e:
+        logging.error(f"Ошибка OpenAI: {e}")
         return "Звезды молчат. Попробуй позже."
 
 # Обработка сообщений
-async def handle_message(update: Update, context):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
-    user_id = update.message.from_user.id
 
     if user_message == "Магический шар":
         context.user_data["mode"] = "magic_ball"
@@ -118,7 +116,7 @@ async def handle_message(update: Update, context):
     else:
         mode = context.user_data.get("mode", "magic_ball")
         if mode == "magic_ball":
-            response = await generate_magic_ball_response(user_message, user_id)
+            response = await generate_magic_ball_response(user_message, update.message.from_user.id, context)
         else:
             response = await generate_oracle_response(user_message)
 
@@ -131,8 +129,11 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Запуск polling
-    application.run_polling()
+    # Запуск polling с обработкой исключений
+    try:
+        application.run_polling()
+    except Exception as e:
+        logging.error(f"Ошибка в основном цикле бота: {e}")
 
 if __name__ == "__main__":
     main()
