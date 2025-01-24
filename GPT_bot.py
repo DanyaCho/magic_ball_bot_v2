@@ -41,7 +41,7 @@ EXTRA_RESPONSES = [
 
 # Ответы для скрытого режима "медитация"
 MEDITATION_RESPONSES = [
-    "похуй", "похуй", "да похуй", "тоже похуй", "вообще похую"
+    "Похуй!", "Похуй!", "Тоже похуй!", "Вообще похую!"
 ]
 
 # Команда /start
@@ -131,7 +131,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if context.user_data["meditation_step"] >= len(MEDITATION_RESPONSES):
                 context.user_data["mode"] = None  # Завершаем скрытый режим
                 await update.message.reply_text(response)
-                await update.message.reply_text("Скрытый режим завершён.")
+                await update.message.reply_text("Режим медитации завершён.")
             else:
                 await update.message.reply_text(response)
             return
@@ -140,7 +140,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_message == "медитация":
         context.user_data["mode"] = "meditation"
         context.user_data["meditation_step"] = 0
-        await update.message.reply_text("Скрытый режим активирован. Сосредоточьтесь.")
+        await update.message.reply_text("Режим медитации активирован.")
         return
 
     # Обычные режимы
