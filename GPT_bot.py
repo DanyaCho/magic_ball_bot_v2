@@ -142,10 +142,7 @@ async def set_commands(application):
 
 # Настройка бота
 def main():
-    application = Application.builder().token(BOT_TOKEN).build()
-
-    # Установка команд меню
-    application.post_init(lambda _: application.create_task(set_commands(application)))
+    application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
@@ -160,4 +157,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
