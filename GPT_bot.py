@@ -143,12 +143,14 @@ def main():
     application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    async def on_startup(application: Application):
+    async def on_startup() -> None:
         await set_commands(application)
+
+    application.post_init(on_startup)
 
     # **Запуск бота**
     try:
-        application.run_polling(on_startup=on_startup)
+        application.run_polling()
     except Exception as e:
         logging.error(f"Ошибка в основном цикле бота: {e}")
 
