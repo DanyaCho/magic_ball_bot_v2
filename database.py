@@ -40,5 +40,7 @@ class HiddenMode(Base):
     unlocked = Column(Boolean, default=False)  # Открыт ли режим
 
 # Создаем таблицы в базе данных
+def get_user(db, telegram_id: int):
+    return db.query(User).filter(User.telegram_id == telegram_id).first()
 def init_db():
     Base.metadata.create_all(bind=engine)
