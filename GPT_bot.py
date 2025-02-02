@@ -22,6 +22,9 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
+# Подключение к базе данных
+db = database
+
 # Загрузка ответов и текстов из JSON
 with open("responses.json", "r", encoding="utf-8") as f:
     responses = json.load(f)
@@ -29,19 +32,21 @@ with open("responses.json", "r", encoding="utf-8") as f:
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    database.add_user(user_id)
+    username = update.message.from_user.username or "unknown"  # Исправлено!
+    
+    database.add_user(user_id, username)
     await update.message.reply_text(responses["start_message"])
     context.user_data.clear()
 
 # Команда /oracle
 async def oracle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["mode"] = "oracle"
-    await update.message.reply_text(responses["oracle_mode"])
+    await update.message.reply_text(responses.get("oracle_mode", "Режим Оракула активирован."))
 
 # Команда /magicball
 async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["mode"] = "magic_ball"
-    await update.message.reply_text(responses["magic_ball_mode"])
+    await update.message.reply_text(responses.get("magic_ball_mode", "Режим Магического шара активирован."))
 
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, user_id, context):
@@ -49,15 +54,15 @@ async def generate_magic_ball_response(question, user_id, context):
     user_data = database.get_user(user_id)
 
     if not user_data:
-        database.add_user(user_id)
+        database.add_user(user_id, "unknown")
         user_data = database.get_user(user_id)
 
-    if "last_interaction_date" in user_data:
+    if user_data and "last_interaction_date" in user_data:
         last_date = user_data["last_interaction_date"]
         if now.date() != last_date:
             database.reset_user_responses(user_id)
 
-    if "last_question" in user_data and question.lower() in responses["repeat_questions"]:
+    if user_data and "last_question" in user_data and question.lower() in responses["repeat_questions"]:
         return f"{user_data['last_response']} (я повторяю)."
 
     chosen_tone = random.choice(["negative", "positive", "neutral"])
@@ -74,12 +79,12 @@ async def generate_oracle_response(question, user_id):
     user_data = database.get_user(user_id)
     
     if not user_data:
-        database.add_user(user_id)
+        database.add_user(user_id, "unknown")
         user_data = database.get_user(user_id)
     
-    if not user_data["is_premium"] and user_data["free_responses"] <= 0:
-        return responses["oracle_no_credits"]
-    
+    if not user_data["premium"] and user_data["free_answers_remaining"] <= 0:
+        return responses.get("oracle_no_credits", "У вас закончились бесплатные ответы.")
+
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -89,11 +94,11 @@ async def generate_oracle_response(question, user_id):
             ]
         )
         response = openai_response["choices"][0]["message"]["content"].strip()
-        database.decrement_free_responses(user_id)
+        database.decrease_free_answers(user_id)
         return response
     except openai.error.OpenAIError as e:
         logging.error(f"Ошибка OpenAI: {e}")
-        return responses["oracle_error"]
+        return responses.get("oracle_error", "Произошла ошибка при обращении к Оракулу.")
 
 # Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -126,7 +131,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(response)
 
 # Настройка команд меню
-async def set_commands(application: Application):
+async def set_commands(application):
     commands = [
         BotCommand("start", responses["menu_start"]),
         BotCommand("oracle", responses["menu_oracle"]),
@@ -134,19 +139,16 @@ async def set_commands(application: Application):
     ]
     await application.bot.set_my_commands(commands)
 
-# **Функция для старта бота**
-async def on_startup(application: Application):
-    await set_commands(application)
-
+# Настройка бота
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
-    
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # **Запуск бота**
+    # Убираем `on_startup`, исправляем структуру запуска
     try:
         application.run_polling()
     except Exception as e:
