@@ -23,7 +23,7 @@ logging.basicConfig(
 )
 
 # Подключение к базе данных
-db = database
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Загрузка конфигурации из JSON
 with open("config.json", "r", encoding="utf-8") as f:
@@ -57,21 +57,12 @@ async def generate_magic_ball_response(question, user_id, context):
         database.add_user(user_id, username)
         user_data = database.get_user(user_id)
 
-    if "last_interaction_date" in user_data:
-        last_date = user_data["last_interaction_date"]
-        if now.date() != last_date:
-            database.reset_user_responses(user_id)
-
-    if "last_question" in user_data and question.lower() in config["repeat_triggers"]:
-        return f"{user_data['last_response']} (я повторяю)."
-
     chosen_tone = random.choice(["negative", "positive", "neutral"])
     response = random.choice(config["magic_ball_responses"][chosen_tone])
 
     if random.random() < 0.1:
         response += " " + random.choice(config["magic_ball_responses"]["extra"])
-
-    database.update_user_response(user_id, question.lower(), response)
+    
     return response
 
 # Генерация ответа для Оракула
@@ -118,14 +109,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = await generate_magic_ball_response(user_message, user_id, context)
     elif mode == "oracle":
         response = await generate_oracle_response(user_message, user_id)
-    elif mode == "meditation":
-        step = context.user_data.get("meditation_step", 0)
-        if step < len(config["hidden_mode_responses"]):
-            response = config["hidden_mode_responses"][step]
-            context.user_data["meditation_step"] += 1
-        else:
-            context.user_data["mode"] = "magic_ball"
-            response = config["messages"]["hidden_mode_deactivated"]
     else:
         response = config["messages"]["unknown_mode"]
 
