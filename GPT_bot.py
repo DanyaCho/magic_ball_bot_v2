@@ -1,7 +1,7 @@
 import random
 import json
 from datetime import datetime
-from telegram import Update, BotCommand
+from telegram import Update, BotCommand, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import openai
 from dotenv import load_dotenv
@@ -42,7 +42,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         config["messages"]["start"], reply_markup=reply_markup
     )
-    context.user_data.clear()  # Сброс контекста для пользователя при запуске
+    # Если нужно сбросить историю, очищаем только часть данных, не трогая режим
+    current_mode = context.user_data.get("mode")
+    context.user_data.clear()
+    if current_mode:
+        context.user_data["mode"] = current_mode
 
 # Команда /oracle
 async def oracle(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -58,13 +62,14 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def generate_magic_ball_response(question, user_id, context):
     now = datetime.now()
 
-    # Очистка контекста через день
+    # Очистка данных магического шара через новый день (удаляем только специфичные ключи)
     if "last_interaction_date" in context.user_data:
         last_date = context.user_data["last_interaction_date"]
         if now.date() != last_date:
-            context.user_data.clear()
+            for key in ["last_question", "last_response", "last_interaction_date"]:
+                context.user_data.pop(key, None)
 
-    # Если вопрос повторный
+    # Если вопрос повторный (срабатывает для определённых триггеров)
     if "last_question" in context.user_data and question.lower() in config["repeat_triggers"]:
         return f"{context.user_data['last_response']} (я повторяю)."
 
@@ -77,11 +82,11 @@ async def generate_magic_ball_response(question, user_id, context):
     else:
         response = random.choice(config["magic_ball_responses"]["neutral"])
 
-    # Редкий случай добавления дополнительной фразы
-    if random.random() < 0.1:  # 10% вероятность
+    # Редкий случай добавления дополнительной фразы (10% вероятность)
+    if random.random() < 0.1:
         response += " " + random.choice(config["magic_ball_responses"]["extra"])
 
-    # Сохранение контекста
+    # Сохранение данных для повторных вопросов
     context.user_data["last_question"] = question.lower()
     context.user_data["last_response"] = response
     context.user_data["last_interaction_date"] = now.date()
@@ -104,12 +109,14 @@ async def generate_oracle_response(question):
         logging.error(f"Ошибка OpenAI: {e}")
         return config["messages"]["oracle_error"]
 
-# Обработка сообщений
+# Обработка входящих сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.lower()
 
     # Проверка на активацию скрытого режима
     if user_message == config["hidden_mode_trigger"]:
+        # Сохраняем предыдущий режим для последующего восстановления
+        context.user_data["previous_mode"] = context.user_data.get("mode", "magic_ball")
         context.user_data["mode"] = "hidden"
         context.user_data["hidden_mode_index"] = 0
         await update.message.reply_text(config["messages"]["hidden_mode_activated"])
@@ -125,8 +132,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         index = context.user_data.get("hidden_mode_index", 0)
         response = hidden_responses[index]
         context.user_data["hidden_mode_index"] = (index + 1) % len(hidden_responses)
-        if index == len(hidden_responses) - 1:  # Выключаем режим после последнего ответа
-            context.user_data["mode"] = "magic_ball"
+        # После последнего ответа в скрытом режиме восстанавливаем предыдущий режим
+        if index == len(hidden_responses) - 1:
+            restored_mode = context.user_data.get("previous_mode", "magic_ball")
+            context.user_data["mode"] = restored_mode
+            context.user_data.pop("previous_mode", None)
             await update.message.reply_text(config["messages"]["hidden_mode_deactivated"])
     else:
         response = config["messages"]["unknown_mode"]
@@ -142,7 +152,7 @@ async def set_commands(application):
     except Exception as e:
         logging.error(f"Ошибка при установке команд: {e}")
 
-# Настройка бота
+# Настройка и запуск бота
 def main():
     application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
 
@@ -151,7 +161,6 @@ def main():
     application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Запуск polling с обработкой исключений
     try:
         application.run_polling()
     except Exception as e:
