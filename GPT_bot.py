@@ -37,10 +37,8 @@ except json.JSONDecodeError as e:
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    buttons = [[KeyboardButton("Оракул"), KeyboardButton("Магический шар")]]
-    reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
     await update.message.reply_text(
-        config["messages"]["start"], reply_markup=reply_markup
+        config["messages"]["start"]
     )
     # Если нужно сбросить историю, очищаем только часть данных, не трогая режим
     current_mode = context.user_data.get("mode")
