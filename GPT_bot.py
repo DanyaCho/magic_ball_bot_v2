@@ -24,6 +24,7 @@ logging.basicConfig(
 )
 
 # Загрузка конфигурации из JSON
+print("🔄 Начинаем загрузку config.json")
 with open("config.json", "r", encoding="utf-8") as f:
     config = json.load(f)
     print("✅ Загруженный config:", config)
