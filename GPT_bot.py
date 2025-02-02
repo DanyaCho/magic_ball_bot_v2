@@ -22,9 +22,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# Подключение к базе данных
-db = database
-
 # Загрузка ответов и текстов из JSON
 with open("responses.json", "r", encoding="utf-8") as f:
     responses = json.load(f)
@@ -137,27 +134,23 @@ async def set_commands(application):
     ]
     await application.bot.set_my_commands(commands)
 
-# Настройка бота
+# **Функция для старта бота**
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-async def on_startup(application: Application):
-    await set_commands(application)
+    async def on_startup(application: Application):
+        await set_commands(application)
 
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("oracle", oracle))
-application.add_handler(CommandHandler("magicball", magicball))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-application.run_polling(on_startup=on_startup)
-try:
-    application.run_polling()
-except Exception as e:
-    logging.error(f"Ошибка в основном цикле бота: {e}")
+    # **Запуск бота**
+    try:
+        application.run_polling(on_startup=on_startup)
+    except Exception as e:
+        logging.error(f"Ошибка в основном цикле бота: {e}")
 
 if __name__ == "__main__":
     main()
