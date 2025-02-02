@@ -1,18 +1,19 @@
 import random
 import json
 from datetime import datetime
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, BotCommand
+from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import openai
 from dotenv import load_dotenv
 import os
 import logging
-from database import get_user, add_user, decrease_free_answers, update_user_subscription, add_discovered_mode
+import database
 
 # Загрузка переменных окружения
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Установка ключа OpenAI
 openai.api_key = OPENAI_API_KEY
