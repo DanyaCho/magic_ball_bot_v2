@@ -7,6 +7,7 @@ import openai
 from dotenv import load_dotenv
 import os
 import logging
+from database import get_user, add_user, decrease_free_answers, update_user_subscription, add_discovered_mode
 
 # Загрузка переменных окружения
 load_dotenv()
