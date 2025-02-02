@@ -126,7 +126,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(response)
 
 # Настройка команд меню
-async def set_commands(application):
+async def set_commands(application: Application):
     commands = [
         BotCommand("start", responses["menu_start"]),
         BotCommand("oracle", responses["menu_oracle"]),
@@ -135,6 +135,9 @@ async def set_commands(application):
     await application.bot.set_my_commands(commands)
 
 # **Функция для старта бота**
+async def on_startup(application: Application):
+    await set_commands(application)
+
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
     
@@ -142,11 +145,6 @@ def main():
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    async def on_startup() -> None:
-        await set_commands(application)
-
-    application.post_init(on_startup)
 
     # **Запуск бота**
     try:
