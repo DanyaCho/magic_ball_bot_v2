@@ -143,7 +143,15 @@ def main():
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.post_init(lambda _: application.create_task(set_commands(application)))
+async def on_startup(application: Application):
+    await set_commands(application)
+
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("oracle", oracle))
+application.add_handler(CommandHandler("magicball", magicball))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+application.run_polling(on_startup=on_startup)
     try:
         application.run_polling()
     except Exception as e:
