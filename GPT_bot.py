@@ -25,28 +25,27 @@ logging.basicConfig(
 # Подключение к базе данных
 db = database
 
-# Загрузка ответов и текстов из JSON
-with open("responses.json", "r", encoding="utf-8") as f:
-    responses = json.load(f)
+# Загрузка конфигурации из JSON
+with open("config.json", "r", encoding="utf-8") as f:
+    config = json.load(f)
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    username = update.message.from_user.username or "unknown"  # Исправлено!
-    
+    username = update.message.from_user.username or "Unknown"
     database.add_user(user_id, username)
-    await update.message.reply_text(responses["start_message"])
+    await update.message.reply_text(config["messages"]["start"])
     context.user_data.clear()
 
 # Команда /oracle
 async def oracle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["mode"] = "oracle"
-    await update.message.reply_text(responses.get("oracle_mode", "Режим Оракула активирован."))
+    await update.message.reply_text(config["messages"]["oracle_mode"])
 
 # Команда /magicball
 async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["mode"] = "magic_ball"
-    await update.message.reply_text(responses.get("magic_ball_mode", "Режим Магического шара активирован."))
+    await update.message.reply_text(config["messages"]["magic_ball_mode"])
 
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, user_id, context):
@@ -54,22 +53,23 @@ async def generate_magic_ball_response(question, user_id, context):
     user_data = database.get_user(user_id)
 
     if not user_data:
-        database.add_user(user_id, "unknown")
+        username = "Unknown"
+        database.add_user(user_id, username)
         user_data = database.get_user(user_id)
 
-    if user_data and "last_interaction_date" in user_data:
+    if "last_interaction_date" in user_data:
         last_date = user_data["last_interaction_date"]
         if now.date() != last_date:
             database.reset_user_responses(user_id)
 
-    if user_data and "last_question" in user_data and question.lower() in responses["repeat_questions"]:
+    if "last_question" in user_data and question.lower() in config["repeat_triggers"]:
         return f"{user_data['last_response']} (я повторяю)."
 
     chosen_tone = random.choice(["negative", "positive", "neutral"])
-    response = random.choice(responses["magic_ball_responses"][chosen_tone])
+    response = random.choice(config["magic_ball_responses"][chosen_tone])
 
     if random.random() < 0.1:
-        response += " " + random.choice(responses["extra_responses"])
+        response += " " + random.choice(config["magic_ball_responses"]["extra"])
 
     database.update_user_response(user_id, question.lower(), response)
     return response
@@ -79,17 +79,18 @@ async def generate_oracle_response(question, user_id):
     user_data = database.get_user(user_id)
     
     if not user_data:
-        database.add_user(user_id, "unknown")
+        username = "Unknown"
+        database.add_user(user_id, username)
         user_data = database.get_user(user_id)
     
     if not user_data["premium"] and user_data["free_answers_remaining"] <= 0:
-        return responses.get("oracle_no_credits", "У вас закончились бесплатные ответы.")
-
+        return config["messages"]["oracle_error"]
+    
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": responses["oracle_prompt"]},
+                {"role": "system", "content": config["oracle_description"]},
                 {"role": "user", "content": question}
             ]
         )
@@ -98,17 +99,17 @@ async def generate_oracle_response(question, user_id):
         return response
     except openai.error.OpenAIError as e:
         logging.error(f"Ошибка OpenAI: {e}")
-        return responses.get("oracle_error", "Произошла ошибка при обращении к Оракулу.")
+        return config["messages"]["oracle_error"]
 
 # Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     user_id = update.message.from_user.id
     
-    if user_message.lower() == "медитация":
+    if user_message.lower() == config["hidden_mode_trigger"]:
         context.user_data["mode"] = "meditation"
         context.user_data["meditation_step"] = 0
-        await update.message.reply_text(responses["meditation_start"])
+        await update.message.reply_text(config["messages"]["hidden_mode_activated"])
         return
     
     mode = context.user_data.get("mode", "magic_ball")
@@ -119,40 +120,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = await generate_oracle_response(user_message, user_id)
     elif mode == "meditation":
         step = context.user_data.get("meditation_step", 0)
-        if step < len(responses["meditation_responses"]):
-            response = responses["meditation_responses"][step]
+        if step < len(config["hidden_mode_responses"]):
+            response = config["hidden_mode_responses"][step]
             context.user_data["meditation_step"] += 1
         else:
             context.user_data["mode"] = "magic_ball"
-            response = responses["meditation_end"]
+            response = config["messages"]["hidden_mode_deactivated"]
     else:
-        response = responses["unknown_command"]
+        response = config["messages"]["unknown_mode"]
 
     await update.message.reply_text(response)
 
 # Настройка команд меню
 async def set_commands(application):
-    commands = [
-        BotCommand("start", responses["menu_start"]),
-        BotCommand("oracle", responses["menu_oracle"]),
-        BotCommand("magicball", responses["menu_magicball"]),
-    ]
+    commands = [BotCommand(cmd["command"], cmd["description"]) for cmd in config["commands"]]
     await application.bot.set_my_commands(commands)
 
 # Настройка бота
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Убираем `on_startup`, исправляем структуру запуска
-    try:
-        application.run_polling()
-    except Exception as e:
-        logging.error(f"Ошибка в основном цикле бота: {e}")
+    
+    async def on_startup(application: Application):
+        await set_commands(application)
+    
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
