@@ -49,10 +49,16 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, user_id, context):
     now = datetime.now()
-    user_data = database.get_user(user_id) or {}
-    
-    if "last_interaction_date" in user_data and now.date() != user_data["last_interaction_date"]:
-        database.reset_user_responses(user_id)
+    user_data = database.get_user(user_id)
+
+    if not user_data:
+        database.add_user(user_id)
+        user_data = database.get_user(user_id)
+
+    if "last_interaction_date" in user_data:
+        last_date = user_data["last_interaction_date"]
+        if now.date() != last_date:
+            database.reset_user_responses(user_id)
 
     if "last_question" in user_data and question.lower() in responses["repeat_questions"]:
         return f"{user_data['last_response']} (я повторяю)."
@@ -68,9 +74,13 @@ async def generate_magic_ball_response(question, user_id, context):
 
 # Генерация ответа для Оракула
 async def generate_oracle_response(question, user_id):
-    user_data = database.get_user(user_id) or {}
-
-    if not user_data.get("is_premium") and user_data.get("free_responses", 0) <= 0:
+    user_data = database.get_user(user_id)
+    
+    if not user_data:
+        database.add_user(user_id)
+        user_data = database.get_user(user_id)
+    
+    if not user_data["is_premium"] and user_data["free_responses"] <= 0:
         return responses["oracle_no_credits"]
     
     try:
@@ -130,23 +140,24 @@ async def set_commands(application):
 # Настройка бота
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Регистрация команд
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    async def on_startup():
-        await set_commands(application)
+async def on_startup(application: Application):
+    await set_commands(application)
 
-    # Запускаем бота
-    try:
-        application.initialize()  # Инициализация бота
-        application.post_init(on_startup)  # Вызываем on_startup
-        application.run_polling()  # Запуск поллинга
-    except Exception as e:
-        logging.error(f"Ошибка в основном цикле бота: {e}")
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("oracle", oracle))
+application.add_handler(CommandHandler("magicball", magicball))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+application.run_polling(on_startup=on_startup)
+try:
+    application.run_polling()
+except Exception as e:
+    logging.error(f"Ошибка в основном цикле бота: {e}")
 
 if __name__ == "__main__":
     main()
