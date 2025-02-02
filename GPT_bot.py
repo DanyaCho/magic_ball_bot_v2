@@ -7,7 +7,7 @@ import openai
 from dotenv import load_dotenv
 import os
 import logging
-from database import Database
+import database
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -23,7 +23,7 @@ logging.basicConfig(
 )
 
 # Подключение к базе данных
-db = Database()
+db = database
 
 # Загрузка ответов и текстов из JSON
 with open("responses.json", "r", encoding="utf-8") as f:
