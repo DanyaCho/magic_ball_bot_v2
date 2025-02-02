@@ -1,46 +1,84 @@
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 import os
+import psycopg2
+from psycopg2.extras import DictCursor
 from dotenv import load_dotenv
 
 # Загружаем переменные окружения
 load_dotenv()
 
-# Получаем URL базы данных из переменных окружения
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Подключение к базе данных
+DB_PARAMS = {
+    "dbname": os.getenv("DB_NAME"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "host": os.getenv("DB_HOST"),
+    "port": os.getenv("DB_PORT"),
+}
 
-# Создаем движок базы данных
-engine = create_engine(DATABASE_URL)
+def get_db_connection():
+    """Создает подключение к базе данных"""
+    return psycopg2.connect(**DB_PARAMS, cursor_factory=DictCursor)
 
-# Создаем сессию
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def create_tables():
+    """Создает таблицы, если их нет"""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    telegram_id BIGINT UNIQUE NOT NULL,
+                    username TEXT,
+                    premium BOOLEAN DEFAULT FALSE,
+                    free_answers_remaining INT DEFAULT 3,
+                    discovered_modes TEXT[] DEFAULT '{}'
+                );
+            """)
+            conn.commit()
 
-# Базовый класс для моделей
-Base = declarative_base()
+def get_user(telegram_id):
+    """Получает данные о пользователе"""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM users WHERE telegram_id = %s;", (telegram_id,))
+            return cur.fetchone()
 
-# Таблица пользователей
-class User(Base):
-    __tablename__ = "users"
+def add_user(telegram_id, username):
+    """Добавляет нового пользователя"""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO users (telegram_id, username) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                (telegram_id, username)
+            )
+            conn.commit()
 
-    id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(Integer, unique=True, nullable=False, index=True)
-    username = Column(String, nullable=True)
-    premium = Column(Boolean, default=False)  # Есть ли подписка
-    free_answers_left = Column(Integer, default=3)  # Остаток бесплатных ответов
-    created_at = Column(DateTime, default="now()")
+def update_user_subscription(telegram_id, is_premium):
+    """Обновляет подписку пользователя"""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET premium = %s WHERE telegram_id = %s;",
+                (is_premium, telegram_id)
+            )
+            conn.commit()
 
-# Таблица скрытых режимов
-class HiddenMode(Base):
-    __tablename__ = "hidden_modes"
+def decrease_free_answers(telegram_id):
+    """Уменьшает количество бесплатных ответов"""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET free_answers_remaining = free_answers_remaining - 1 WHERE telegram_id = %s AND free_answers_remaining > 0 RETURNING free_answers_remaining;",
+                (telegram_id,)
+            )
+            result = cur.fetchone()
+            return result["free_answers_remaining"] if result else 0
 
-    id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(Integer, nullable=False)
-    mode_name = Column(String, nullable=False)
-    unlocked = Column(Boolean, default=False)  # Открыт ли режим
-
-# Создаем таблицы в базе данных
-def get_user(db, telegram_id: int):
-    return db.query(User).filter(User.telegram_id == telegram_id).first()
-def init_db():
-    Base.metadata.create_all(bind=engine)
+def add_discovered_mode(telegram_id, mode):
+    """Добавляет найденный скрытый режим"""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET discovered_modes = array_append(discovered_modes, %s) WHERE telegram_id = %s;",
+                (mode, telegram_id)
+            )
+            conn.commit()
