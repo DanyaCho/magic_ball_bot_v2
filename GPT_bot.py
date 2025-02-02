@@ -82,7 +82,7 @@ async def generate_oracle_response(question, user_id):
     if not user_data["is_premium"] and user_data["free_responses"] <= 0:
         return responses["oracle_no_credits"]
     
-    try:
+try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
