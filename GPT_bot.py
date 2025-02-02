@@ -32,7 +32,7 @@ with open("responses.json", "r", encoding="utf-8") as f:
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
-    db.add_user(user_id)
+    database.add_user(user_id)
     await update.message.reply_text(responses["start_message"])
     context.user_data.clear()
 
@@ -49,16 +49,16 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, user_id, context):
     now = datetime.now()
-    user_data = db.get_user(user_id)
+    user_data = database.get_user(user_id)
     
     if not user_data:
-        db.add_user(user_id)
-        user_data = db.get_user(user_id)
+        database.add_user(user_id)
+        user_data = database.get_user(user_id)
     
     if "last_interaction_date" in user_data:
         last_date = user_data["last_interaction_date"]
         if now.date() != last_date:
-            db.reset_user_responses(user_id)
+            database.reset_user_responses(user_id)
 
     if "last_question" in user_data and question.lower() in responses["repeat_questions"]:
         return f"{user_data['last_response']} (я повторяю)."
@@ -69,15 +69,15 @@ async def generate_magic_ball_response(question, user_id, context):
     if random.random() < 0.1:
         response += " " + random.choice(responses["extra_responses"])
 
-    db.update_user_response(user_id, question.lower(), response)
+    database.update_user_response(user_id, question.lower(), response)
     return response
 
 # Генерация ответа для Оракула
 async def generate_oracle_response(question, user_id):
-    user_data = db.get_user(user_id)
+    user_data = database.get_user(user_id)
     if not user_data:
-        db.add_user(user_id)
-        user_data = db.get_user(user_id)
+        database.add_user(user_id)
+        user_data = database.get_user(user_id)
     
     if not user_data["is_premium"] and user_data["free_responses"] <= 0:
         return responses["oracle_no_credits"]
@@ -91,7 +91,7 @@ async def generate_oracle_response(question, user_id):
             ]
         )
         response = openai_response["choices"][0]["message"]["content"].strip()
-        db.decrement_free_responses(user_id)
+        database.decrement_free_responses(user_id)
         return response
     except openai.error.OpenAIError as e:
         logging.error(f"Ошибка OpenAI: {e}")
