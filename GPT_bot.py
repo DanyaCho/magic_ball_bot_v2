@@ -13,6 +13,7 @@ import database
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Установка ключа OpenAI
 openai.api_key = OPENAI_API_KEY
@@ -22,12 +23,10 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# Подключение к базе данных
-DATABASE_URL = os.getenv("DATABASE_URL")
-
 # Загрузка конфигурации из JSON
 with open("config.json", "r", encoding="utf-8") as f:
     config = json.load(f)
+    print("✅ Загруженный config:", config)
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
