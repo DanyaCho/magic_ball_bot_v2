@@ -1,21 +1,13 @@
-from database import SessionLocal, User, init_db
-
-# Создаем таблицы в БД
-init_db()
-
-# Создаем сессию
-db = SessionLocal()
+from database import add_user, get_user, update_user_subscription
 
 # Добавляем тестового пользователя
-test_user = User(telegram_id=123456789, username="TestUser", premium=False, free_answers_left=3)
-db.add(test_user)
-db.commit()
+add_user(123456789, "TestUser")
 
-# Проверяем, что пользователь добавлен
-user = db.query(User).filter(User.telegram_id == 123456789).first()
-if user:
-    print(f"Пользователь найден: {user.username}, подписка: {user.premium}, бесплатных ответов: {user.free_answers_left}")
-else:
-    print("Ошибка: Пользователь не найден.")
+# Получаем информацию о пользователе
+print(get_user(123456789))
 
-db.close()
+# Делаем пользователя премиумом
+update_user_subscription(123456789, True)
+
+# Проверяем обновление
+print(get_user(123456789))
