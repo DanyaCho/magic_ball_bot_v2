@@ -22,17 +22,18 @@ openai.api_key = OPENAI_API_KEY
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
 # Загрузка конфигурации из config.json
 try:
     with open("config.json", "r", encoding="utf-8") as config_file:
         config = json.load(config_file)
-        logging.info("Конфигурация успешно загружена.")
+        logger.info("Конфигурация успешно загружена.")
 except FileNotFoundError:
-    logging.error("Файл config.json не найден.")
+    logger.error("Файл config.json не найден.")
     exit(1)
 except json.JSONDecodeError as e:
-    logging.error(f"Ошибка при разборе config.json: {e}")
+    logger.error(f"Ошибка при разборе config.json: {e}")
     exit(1)
 
 # Команда /start
@@ -40,6 +41,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         config["messages"]["start"]
     )
+    logger.info(f"Пользователь {update.message.from_user.id} вызвал команду /start")
     # Если нужно сбросить историю, очищаем только часть данных, не трогая режим
     current_mode = context.user_data.get("mode")
     context.user_data.clear()
@@ -50,11 +52,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def oracle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["mode"] = "oracle"
     await update.message.reply_text(config["messages"]["oracle_mode"])
+    logger.info(f"Пользователь {update.message.from_user.id} переключился в режим Оракула")
 
 # Команда /magicball
 async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["mode"] = "magic_ball"
     await update.message.reply_text(config["messages"]["magic_ball_mode"])
+    logger.info(f"Пользователь {update.message.from_user.id} переключился в режим Магического шара")
 
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, user_id, context):
@@ -80,6 +84,8 @@ async def generate_magic_ball_response(question, user_id, context):
     else:
         response = random.choice(config["magic_ball_responses"]["neutral"])
 
+    logger.info(f"Ответ Магического Шара для {user_id}: {response}")
+
     # Редкий случай добавления дополнительной фразы (10% вероятность)
     if random.random() < 0.1:
         response += " " + random.choice(config["magic_ball_responses"]["extra"])
@@ -93,6 +99,7 @@ async def generate_magic_ball_response(question, user_id, context):
 
 # Генерация ответа для Оракула
 async def generate_oracle_response(question):
+    logger.info(f"Запрос в OpenAI для Оракула: {question}")
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -102,14 +109,16 @@ async def generate_oracle_response(question):
             ]
         )
         response = openai_response["choices"][0]["message"]["content"]
+        logger.info(f"Ответ Оракула: {response.strip()}")
         return response.strip()
     except openai.error.OpenAIError as e:
-        logging.error(f"Ошибка OpenAI: {e}")
+        logger.error(f"Ошибка OpenAI: {e}")
         return config["messages"]["oracle_error"]
 
 # Обработка входящих сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.lower()
+    logger.info(f"Получено сообщение от пользователя {update.message.from_user.id}: {user_message}")
 
     # Проверка на активацию скрытого режима
     if user_message == config["hidden_mode_trigger"]:
@@ -139,10 +148,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         response = config["messages"]["unknown_mode"]
 
+    logger.info(f"Финальный ответ пользователю {update.message.from_user.id}: {response}")
     await update.message.reply_text(response)
 
 # Настройка команд меню
 async def set_commands(application):
+    logger.info("Бот успешно запущен и готов к работе.")
     try:
         commands = [BotCommand(cmd["command"], cmd["description"]) for cmd in config["commands"]]
         await application.bot.set_my_commands(commands)
@@ -152,6 +163,7 @@ async def set_commands(application):
 
 # Настройка и запуск бота
 def main():
+    logger.info("Запуск бота...")
     application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
 
     application.add_handler(CommandHandler("start", start))
@@ -162,7 +174,7 @@ def main():
     try:
         application.run_polling()
     except Exception as e:
-        logging.error(f"Ошибка в основном цикле бота: {e}")
+        logger.error(f"Ошибка в основном цикле бота: {e}")
 
 if __name__ == "__main__":
     main()
