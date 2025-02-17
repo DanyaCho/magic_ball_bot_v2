@@ -1,84 +1,76 @@
-import os
+import logging
 import psycopg2
 from psycopg2.extras import DictCursor
+from datetime import datetime
 from dotenv import load_dotenv
+import os
 
-# Загружаем переменные окружения
+# Загрузка переменных окружения
 load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Подключение к базе данных
-DB_PARAMS = {
-    "dbname": os.getenv("DB_NAME"),
-    "user": os.getenv("DB_USER"),
-    "password": os.getenv("DB_PASSWORD"),
-    "host": os.getenv("DB_HOST"),
-    "port": os.getenv("DB_PORT"),
-}
-
+# Подключение к БД
 def get_db_connection():
-    """Создает подключение к базе данных"""
-    return psycopg2.connect(**DB_PARAMS, cursor_factory=DictCursor)
+    try:
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
+        logging.info("Подключение к БД установлено.")
+        return conn
+    except psycopg2.Error as e:
+        logging.error(f"Ошибка подключения к БД: {e}")
+        return None
 
-def create_tables():
-    """Создает таблицы, если их нет"""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    telegram_id BIGINT UNIQUE NOT NULL,
-                    username TEXT,
-                    premium BOOLEAN DEFAULT FALSE,
-                    free_answers_remaining INT DEFAULT 3,
-                    discovered_modes TEXT[] DEFAULT '{}'
-                );
-            """)
-            conn.commit()
+# Добавление пользователя
+def add_user(telegram_id, username):
+    conn = get_db_connection()
+    if not conn:
+        return
 
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO users (telegram_id, username, created_at) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING;",
+                    (telegram_id, username, datetime.utcnow()),
+                )
+                logging.info(f"Добавлен пользователь {telegram_id} ({username}) в БД.")
+    except psycopg2.Error as e:
+        logging.error(f"Ошибка при добавлении пользователя {telegram_id}: {e}")
+    finally:
+        conn.close()
+
+# Получение пользователя
 def get_user(telegram_id):
-    """Получает данные о пользователе"""
-    with get_db_connection() as conn:
+    conn = get_db_connection()
+    if not conn:
+        return None
+
+    try:
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM users WHERE telegram_id = %s;", (telegram_id,))
-            return cur.fetchone()
+            user = cur.fetchone()
+            logging.info(f"Запрос информации о пользователе {telegram_id}: {user}")
+            return user
+    except psycopg2.Error as e:
+        logging.error(f"Ошибка при получении пользователя {telegram_id}: {e}")
+        return None
+    finally:
+        conn.close()
 
-def add_user(telegram_id, username):
-    """Добавляет нового пользователя"""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO users (telegram_id, username) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
-                (telegram_id, username)
-            )
-            conn.commit()
+# Обновление режима подписки
+def update_user_subscription(telegram_id, premium_status):
+    conn = get_db_connection()
+    if not conn:
+        return
 
-def update_user_subscription(telegram_id, is_premium):
-    """Обновляет подписку пользователя"""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE users SET premium = %s WHERE telegram_id = %s;",
-                (is_premium, telegram_id)
-            )
-            conn.commit()
-
-def decrease_free_answers(telegram_id):
-    """Уменьшает количество бесплатных ответов"""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE users SET free_answers_remaining = free_answers_remaining - 1 WHERE telegram_id = %s AND free_answers_remaining > 0 RETURNING free_answers_remaining;",
-                (telegram_id,)
-            )
-            result = cur.fetchone()
-            return result["free_answers_remaining"] if result else 0
-
-def add_discovered_mode(telegram_id, mode):
-    """Добавляет найденный скрытый режим"""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE users SET discovered_modes = array_append(discovered_modes, %s) WHERE telegram_id = %s;",
-                (mode, telegram_id)
-            )
-            conn.commit()
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE users SET premium = %s WHERE telegram_id = %s;",
+                    (premium_status, telegram_id),
+                )
+                logging.info(f"Пользователь {telegram_id} теперь {'премиум' if premium_status else 'обычный'}.")
+    except psycopg2.Error as e:
+        logging.error(f"Ошибка при обновлении подписки пользователя {telegram_id}: {e}")
+    finally:
+        conn.close()
