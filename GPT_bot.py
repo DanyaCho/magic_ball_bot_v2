@@ -61,7 +61,7 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Пользователь {update.message.from_user.id} переключился в режим Магического шара")
 
 # Генерация ответа для Магического Шара
-async def generate_magic_ball_response(question, user_id, context):
+async def generate_magic_ball_response(question, telegram_id, context):
     now = datetime.now()
 
     # Очистка данных магического шара через новый день (удаляем только специфичные ключи)
@@ -84,7 +84,7 @@ async def generate_magic_ball_response(question, user_id, context):
     else:
         response = random.choice(config["magic_ball_responses"]["neutral"])
 
-    logger.info(f"Ответ Магического Шара для {user_id}: {response}")
+    logger.info(f"Ответ Магического Шара для {telegram_id}: {response}")
 
     # Редкий случай добавления дополнительной фразы (10% вероятность)
     if random.random() < 0.1:
@@ -121,17 +121,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Получено сообщение от пользователя {update.message.from_user.id}: {user_message}")
 
     # Получаем информацию о пользователе из базы
-    user_id = update.message.from_user.id
-    user_data = database.get_user(user_id)
+    telegram_id = update.message.from_user.id
+    user_data = database.get_user(telegram_id)
 
     if not user_data:
         # Если пользователя нет в базе – добавляем
-        database.add_user(user_id, update.message.from_user.username)
-        user_data = database.get_user(user_id)
+        database.add_user(telegram_id, update.message.from_user.username)
+        user_data = database.get_user(telegram_id)
 
     # Если по какой-то причине `get_user` вернул None, сразу возвращаем ошибку
     if not user_data:
-        logger.error(f"Ошибка получения данных пользователя {user_id} после добавления!")
+        logger.error(f"Ошибка получения данных пользователя {telegram_id} после добавления!")
         await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
         return
 
@@ -140,7 +140,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Если у пользователя нет подписки и закончились бесплатные ответы
     if not is_premium and free_answers_left <= 0:
-        logger.info(f"Пользователь {user_id} исчерпал лимит бесплатных ответов.")
+        logger.info(f"Пользователь {telegram_id} исчерпал лимит бесплатных ответов.")
         await update.message.reply_text(
             "Ваши бесплатные запросы закончились. Оформите подписку, чтобы продолжить пользоваться ботом."
         )
@@ -148,7 +148,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Если у пользователя нет подписки – уменьшаем счетчик
     if not is_premium:
-        database.decrease_free_answers(user_id)
+        database.decrease_free_answers(telegram_id)
         free_answers_left -= 1
 
     # Если осталось мало бесплатных запросов – предупреждаем
