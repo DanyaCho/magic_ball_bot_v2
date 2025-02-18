@@ -125,19 +125,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = database.get_user(user_id)
 
     if not user_data:
-    # Если пользователя нет в базе – добавляем
+        # Если пользователя нет в базе – добавляем
         database.add_user(user_id, update.message.from_user.username)
         user_data = database.get_user(user_id)
+
+    # Если по какой-то причине `get_user` вернул None, сразу возвращаем ошибку
+    if not user_data:
+        logger.error(f"Ошибка получения данных пользователя {user_id} после добавления!")
+        await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
+        return
 
     is_premium = user_data[3]  # Поле 'premium' (True/False)
     free_answers_left = user_data[4]  # Поле 'free_answers_left'
 
     # Если у пользователя нет подписки и закончились бесплатные ответы
     if not is_premium and free_answers_left <= 0:
-    await update.message.reply_text(
-        "Ваши бесплатные запросы закончились. Оформите подписку, чтобы продолжить пользоваться ботом."
-    )
-    return  # Прекращаем обработку сообщения
+        logger.info(f"Пользователь {user_id} исчерпал лимит бесплатных ответов.")
+        await update.message.reply_text(
+            "Ваши бесплатные запросы закончились. Оформите подписку, чтобы продолжить пользоваться ботом."
+        )
+        return  # Прекращаем обработку сообщения
 
     # Если у пользователя нет подписки – уменьшаем счетчик
     if not is_premium:
@@ -146,9 +153,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Если осталось мало бесплатных запросов – предупреждаем
     if not is_premium and free_answers_left in [1, 2]:
-    await update.message.reply_text(
-        f"У вас осталось {free_answers_left} бесплатных запроса. После этого доступ будет ограничен."
-    )
+        await update.message.reply_text(
+            f"У вас осталось {free_answers_left} бесплатных запроса. После этого доступ будет ограничен."
+        )
 
     # Проверка на активацию скрытого режима
     if user_message == config["hidden_mode_trigger"]:
