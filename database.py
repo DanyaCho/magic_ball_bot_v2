@@ -86,7 +86,7 @@ def update_user_subscription(telegram_id, premium_status):
         conn.close()
 
 # Функция для записи сообщений в лог
-def log_message(user_id, message_text, response_text, mode):
+def log_message(telegram_id, message_text, response_text, mode):
     conn = get_db_connection()
     if not conn:
         return
@@ -96,14 +96,14 @@ def log_message(user_id, message_text, response_text, mode):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO message_logs (user_id, message_text, response_text, mode) 
+                    INSERT INTO message_logs (telegram_id, message_text, response_text, mode) 
                     VALUES (%s, %s, %s, %s);
                     """,
-                    (user_id, message_text, response_text, mode),
+                    (telegram_id, message_text, response_text, mode),
                 )
-                logger.info(f"Лог сообщения добавлен для пользователя {user_id}.")
+                logger.info(f"Лог сообщения добавлен для пользователя {telegram_id}.")
     except psycopg2.Error as e:
-        logger.error(f"Ошибка при сохранении сообщения в базу для пользователя {user_id}: {e}")
+        logger.error(f"Ошибка при сохранении сообщения в базу для пользователя {telegram_id}: {e}")
     finally:
         conn.close()
 
