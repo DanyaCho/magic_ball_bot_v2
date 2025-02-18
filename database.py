@@ -117,11 +117,18 @@ def decrease_free_answers(telegram_id):
         with conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "UPDATE users SET free_answers_left = free_answers_left - 1 WHERE telegram_id = %s AND free_answers_left > 0;",
+                    """
+                    UPDATE users 
+                    SET free_answers_left = free_answers_left - 1 
+                    WHERE telegram_id = %s AND free_answers_left > 0
+                    RETURNING free_answers_left;
+                    """,
                     (telegram_id,),
                 )
-                logger.info(f"Бесплатные ответы уменьшены для пользователя {telegram_id}.")
+                updated_value = cur.fetchone()
+                if updated_value:
+                    logging.info(f"Бесплатные ответы уменьшены: осталось {updated_value[0]} для пользователя {telegram_id}.")
     except psycopg2.Error as e:
-        logger.error(f"Ошибка при уменьшении количества бесплатных ответов {telegram_id}: {e}")
+        logging.error(f"Ошибка при уменьшении количества бесплатных ответов {telegram_id}: {e}")
     finally:
         conn.close()
