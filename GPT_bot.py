@@ -120,6 +120,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.lower()
     logger.info(f"Получено сообщение от пользователя {update.message.from_user.id}: {user_message}")
 
+    # Получаем информацию о пользователе из базы
+    user_id = update.message.from_user.id
+    user_data = database.get_user(user_id)
+
+    if not user_data:
+    # Если пользователя нет в базе – добавляем
+        database.add_user(user_id, update.message.from_user.username)
+        user_data = database.get_user(user_id)
+
+    is_premium = user_data[3]  # Поле 'premium' (True/False)
+    free_answers_left = user_data[4]  # Поле 'free_answers_left'
+
+    # Если у пользователя нет подписки и закончились бесплатные ответы
+    if not is_premium and free_answers_left <= 0:
+    await update.message.reply_text(
+        "Ваши бесплатные запросы закончились. Оформите подписку, чтобы продолжить пользоваться ботом."
+    )
+    return  # Прекращаем обработку сообщения
+
+    # Если у пользователя нет подписки – уменьшаем счетчик
+    if not is_premium:
+        database.decrease_free_answers(user_id)
+        free_answers_left -= 1
+
+    # Если осталось мало бесплатных запросов – предупреждаем
+    if not is_premium and free_answers_left in [1, 2]:
+    await update.message.reply_text(
+        f"У вас осталось {free_answers_left} бесплатных запроса. После этого доступ будет ограничен."
+    )
+
     # Проверка на активацию скрытого режима
     if user_message == config["hidden_mode_trigger"]:
         # Сохраняем предыдущий режим для последующего восстановления
@@ -172,7 +202,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ))
 
     try:
         application.run_polling()
