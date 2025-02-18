@@ -209,7 +209,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     try:
         application.run_polling()
