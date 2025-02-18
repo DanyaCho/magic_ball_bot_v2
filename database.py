@@ -74,3 +74,26 @@ def update_user_subscription(telegram_id, premium_status):
         logging.error(f"Ошибка при обновлении подписки пользователя {telegram_id}: {e}")
     finally:
         conn.close()
+
+
+# Получаем данные из переменных окружения
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Функция для соединения с базой
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
+
+# Функция для записи сообщений
+def log_message(user_id, message_text, response_text, mode):
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO message_logs (user_id, message_text, response_text, mode) VALUES (%s, %s, %s, %s)",
+            (user_id, message_text, response_text, mode)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Ошибка при сохранении сообщения в базу: {e}")
