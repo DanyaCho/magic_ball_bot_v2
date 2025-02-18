@@ -148,6 +148,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         response = config["messages"]["unknown_mode"]
 
+    # Вставляем перед отправкой сообщения пользователю
+    database.log_message(update.message.from_user.id, user_message, response, mode)
+
     logger.info(f"Финальный ответ пользователю {update.message.from_user.id}: {response}")
     await update.message.reply_text(response)
 
