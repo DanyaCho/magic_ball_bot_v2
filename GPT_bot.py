@@ -135,8 +135,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
         return
 
-    is_premium = user_data[3]  # Поле 'premium' (True/False)
-    free_answers_left = user_data[4]  # Поле 'free_answers_left'
+    is_premium = user_data[3] if user_data[3] is not None else False  # Если None, значит не премиум
+    free_answers_left = user_data[4] if user_data[4] is not None else 3  # Если None, ставим 3 бесплатных запроса
 
     # Если у пользователя нет подписки и закончились бесплатные ответы
     if not is_premium and free_answers_left <= 0:
