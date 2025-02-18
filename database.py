@@ -127,8 +127,8 @@ def decrease_free_answers(telegram_id):
                 )
                 updated_value = cur.fetchone()
                 if updated_value:
-                    logging.info(f"Бесплатные ответы уменьшены: осталось {updated_value[0]} для пользователя {telegram_id}.")
+                    logger.info(f"Бесплатные ответы уменьшены для пользователя {telegram_id}. Осталось: {updated_value[0]}")
     except psycopg2.Error as e:
-        logging.error(f"Ошибка при уменьшении количества бесплатных ответов {telegram_id}: {e}")
+        logger.error(f"Ошибка при уменьшении количества бесплатных ответов {telegram_id}: {e}")
     finally:
         conn.close()
