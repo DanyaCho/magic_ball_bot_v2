@@ -148,9 +148,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Если у пользователя нет подписки – уменьшаем счетчик
     if not is_premium:
-        database.decrease_free_answers(user_id)  # Обновляем в БД
-        user_data = database.get_user(user_id)  # Получаем свежие данные
-        free_answers_left = user_data[4]  # Обновляем локально
+        database.decrease_free_answers(user_id)
+    
+    # Перезапрашиваем данные из базы, чтобы обновить `free_answers_left`
+    user_data = database.get_user(user_id)
+    free_answers_left = user_data[4]  # Теперь получаем обновленное значение
+
+    # Если осталось мало бесплатных запросов – предупреждаем
+    if free_answers_left in [1, 2]:
+        await update.message.reply_text(
+            f"У вас осталось {free_answers_left} бесплатных запроса. После этого доступ будет ограничен."
+        )
 
     # Если осталось мало бесплатных запросов – предупреждаем
     if not is_premium and free_answers_left in [1, 2]:
