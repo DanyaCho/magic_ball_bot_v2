@@ -148,10 +148,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Если у пользователя нет подписки – уменьшаем счетчик
     if not is_premium:
-        database.decrease_free_answers(user_id)
+        database.decrease_free_answers(telegram_id)
     
     # Перезапрашиваем данные из базы, чтобы обновить `free_answers_left`
-    user_data = database.get_user(user_id)
+    user_data = database.get_user(telegram_id)
     free_answers_left = user_data[4]  # Теперь получаем обновленное значение
 
     # Если осталось мало бесплатных запросов – предупреждаем
