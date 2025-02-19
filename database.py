@@ -108,7 +108,7 @@ def log_message(telegram_id, message_text, response_text, mode):
         conn.close()
 
 # Уменьшение количества бесплатных ответов у пользователя
-def decrease_free_answers(telegram_id):
+def add_user(telegram_id, username):
     conn = get_db_connection()
     if not conn:
         return
@@ -118,19 +118,14 @@ def decrease_free_answers(telegram_id):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    UPDATE users 
-                    SET free_answers_left = free_answers_left - 1 
-                    WHERE telegram_id = %s AND free_answers_left > 0
-                    RETURNING free_answers_left;
+                    INSERT INTO users (telegram_id, username, free_answers_left, created_at) 
+                    VALUES (%s, %s, %s, %s) 
+                    ON CONFLICT (telegram_id) DO NOTHING;
                     """,
-                    (telegram_id,),
+                    (telegram_id, username, 3, datetime.utcnow()),
                 )
-                updated_value = cur.fetchone()
-                if updated_value:
-                    logger.info(f"Бесплатные ответы уменьшены для пользователя {telegram_id}. Осталось: {updated_value[0]}")
-                else:
-                    logger.warning(f"Не удалось уменьшить free_answers_left для {telegram_id} (возможно, уже 0).")
+                logger.info(f"Добавлен пользователь {telegram_id} ({username}) в БД.")
     except psycopg2.Error as e:
-        logger.error(f"Ошибка при уменьшении количества бесплатных ответов {telegram_id}: {e}")
+        logger.error(f"Ошибка при добавлении пользователя {telegram_id}: {e}")
     finally:
         conn.close()
