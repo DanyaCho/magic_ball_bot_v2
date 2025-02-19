@@ -166,12 +166,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"У вас осталось {free_answers_left} бесплатных запроса. После этого доступ будет ограничен."
         )
 
-    # Если осталось мало бесплатных запросов – предупреждаем
-    if not is_premium and free_answers_left in [1, 2]:
-        await update.message.reply_text(
-            f"У вас осталось {free_answers_left} бесплатных запроса. После этого доступ будет ограничен."
-        )
-
     # Проверка на активацию скрытого режима
     if user_message == config["hidden_mode_trigger"]:
         # Сохраняем предыдущий режим для последующего восстановления
