@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import os
 import logging
 import database
+import regex  # Нужно установить `pip install regex`
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -115,9 +116,19 @@ async def generate_oracle_response(question):
         logger.error(f"Ошибка OpenAI: {e}")
         return config["messages"]["oracle_error"]
 
+def is_pure_text(text):
+    """Проверяет, состоит ли сообщение только из букв, цифр, пробелов и знаков препинания."""
+    return bool(regex.fullmatch(r"[\p{L}\p{N}\p{P}\s]+", text))
+
 # Обработка входящих сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text.lower()
+    user_message = update.message.text
+
+    # Проверяем, что сообщение состоит только из текста
+    if not is_pure_text(user_message):
+        return  # Игнорируем сообщения с эмодзи, вложениями и т.д.
+
+    user_message = user_message.lower()
     logger.info(f"Получено сообщение от пользователя {update.message.from_user.id}: {user_message}")
 
     # Получаем информацию о пользователе из базы
@@ -218,7 +229,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message, block=False))
 
     try:
         application.run_polling()
