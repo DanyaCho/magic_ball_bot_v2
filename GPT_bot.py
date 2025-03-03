@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import os
 import logging
 import database
-import re
+import regex
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -118,7 +118,7 @@ async def generate_oracle_response(question):
 
 def is_pure_text(text):
     """Проверяет, состоит ли сообщение только из букв, цифр, пробелов и знаков препинания."""
-    return bool(re.fullmatch(r"[\p{L}\p{N}\p{P}\s]+", text))
+    return bool(regex.fullmatch(r"[\p{L}\p{N}\p{P}\s]+", text))
 
 # Обработка входящих сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
