@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import os
 import logging
 import database
-import regex  # Нужно установить `pip install regex`
+import re
 
 # Загрузка переменных окружения
 load_dotenv()
