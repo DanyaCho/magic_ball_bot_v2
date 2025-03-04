@@ -72,9 +72,9 @@ async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обрабатывает выбор души из клавиатуры
 async def select_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает нажатие на кнопку с выбором души."""
-    soul_choice = update.message.text.lower()
+    soul_choice = update.message.text.lower().strip()
 
-    if soul_choice in config["characters"]:
+    if soul_choice in config.get("characters", {}):
         context.user_data["mode"] = soul_choice
         soul_name = config["characters"][soul_choice]["name"]
         await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
@@ -89,9 +89,9 @@ async def set_soul_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Использование: /soul имя_души (oracle, trainer, philosopher, hooligan)")
         return
 
-    soul_choice = context.args[0].lower()
-    
-    if soul_choice in config["characters"]:
+    soul_choice = context.args[0].lower().strip()
+
+    if soul_choice in config.get("characters", {}):
         context.user_data["mode"] = soul_choice
         soul_name = config["characters"][soul_choice]["name"]
         await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
@@ -139,7 +139,7 @@ async def generate_magic_ball_response(question, telegram_id, context):
 # Генерация ответа для Душ
 async def generate_soul_response(question, mode):
     """Генерирует ответ от выбранной души."""
-    soul = config["characters"].get(mode, config["characters"].get("oracle", {}))
+    soul = config.get("characters", {}).get(mode, config.get("characters", {}).get("oracle", {}))
     soul_name = soul.get("name", "Неизвестная Душа")
     soul_description = soul.get("description", "Отвечай в своей уникальной манере.")
 
@@ -160,9 +160,14 @@ async def generate_soul_response(question, mode):
         logger.error(f"Ошибка OpenAI: {e}")
         return f"{soul_name} говорит:\n{config['messages']['oracle_error']}"
 
-# Обработка входящих сообщений
+# Обработка входящих сообщений (включая выбор души)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
+
+    # Проверяем, что это выбор души
+    if user_message in config.get("characters", {}):
+        await select_soul(update, context)
+        return
 
     # Проверяем, что сообщение состоит только из текста
     if not is_pure_text(user_message):
@@ -211,7 +216,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     database.log_message(telegram_id, user_message, response, mode)
     logger.info(f"Финальный ответ пользователю {telegram_id}: {response}")
     await update.message.reply_text(response)
-
+    
 # Настройка команд меню
 async def set_commands(application):
     logger.info("Бот успешно запущен и готов к работе.")
@@ -222,7 +227,8 @@ async def set_commands(application):
     except Exception as e:
         logging.error(f"Ошибка при установке команд: {e}")
 
-# Настройка и запуск бота
+
+# Обновление хэндлеров в `main()`
 def main():
     logger.info("Запуск бота...")
     application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
@@ -230,12 +236,10 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
-
     application.add_handler(CommandHandler("souls", set_soul))  # Меню с кнопками выбора души
     application.add_handler(CommandHandler("soul", set_soul_manual))  # Ручной ввод души
-
-    
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Обработка сообщений
+
     try:
         application.run_polling()
     except Exception as e:
