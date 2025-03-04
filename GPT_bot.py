@@ -61,20 +61,36 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(config["messages"]["magic_ball_mode"])
     logger.info(f"Пользователь {update.message.from_user.id} переключился в режим Магического шара")
 
-# Команда /soul - выбор персонажа
+# Отправляет клавиатуру с кнопками выбора души
 async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Вызывает клавиатуру для выбора души."""
-    keyboard = [[name] for name in config["characters"].keys()]  # Делаем кнопки из списка душ
+    keyboard = [[KeyboardButton(name)] for name in config["characters"].keys()]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
     
     await update.message.reply_text("Выбери душу:", reply_markup=reply_markup)
+
+# Обрабатывает выбор души из клавиатуры
+async def select_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает нажатие на кнопку с выбором души."""
+    soul_choice = update.message.text.lower()
+
+    if soul_choice in config["characters"]:
+        context.user_data["mode"] = soul_choice
+        soul_name = config["characters"][soul_choice]["name"]
+        await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
+        logger.info(f"Пользователь {update.message.from_user.id} выбрал душу: {soul_choice}")
+    else:
+        await update.message.reply_text("Такой души нет. Используйте /souls для выбора.")
+
+# Выбор души через команду /soul имя_души
+async def set_soul_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меняет душу вручную, если передан аргумент."""
     if not context.args:
         await update.message.reply_text("Использование: /soul имя_души (oracle, trainer, philosopher, hooligan)")
         return
 
-    """Обрабатывает нажатие на кнопку с выбором души."""
-    soul_choice = update.message.text.lower()
-
+    soul_choice = context.args[0].lower()
+    
     if soul_choice in config["characters"]:
         context.user_data["mode"] = soul_choice
         soul_name = config["characters"][soul_choice]["name"]
@@ -122,9 +138,8 @@ async def generate_magic_ball_response(question, telegram_id, context):
 
 # Генерация ответа для Душ
 async def generate_soul_response(question, mode):
-    characters = config.get("characters", {})
-    soul = characters.get(mode, characters.get("oracle"))  # Если нет, то дефолтный Оракул
-    
+    """Генерирует ответ от выбранной души."""
+    soul = config["characters"].get(mode, config["characters"].get("oracle", {}))
     soul_name = soul.get("name", "Неизвестная Душа")
     soul_description = soul.get("description", "Отвечай в своей уникальной манере.")
 
@@ -132,6 +147,7 @@ async def generate_soul_response(question, mode):
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
+            temperature=0.7,  # Добавили немного случайности
             messages=[
                 {"role": "system", "content": soul_description},
                 {"role": "user", "content": question}
@@ -142,11 +158,7 @@ async def generate_soul_response(question, mode):
         return f"{soul_name} говорит:\n{response}"
     except openai.error.OpenAIError as e:
         logger.error(f"Ошибка OpenAI: {e}")
-        return f"{soul_name} говорит:\n" + config["messages"]["oracle_error"]
-
-def is_pure_text(text):
-    """Проверяет, состоит ли сообщение только из букв, цифр, пробелов и знаков препинания."""
-    return bool(regex.fullmatch(r"[\p{L}\p{N}\p{P}\s]+", text))
+        return f"{soul_name} говорит:\n{config['messages']['oracle_error']}"
 
 # Обработка входящих сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -218,9 +230,12 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
-    application.add_handler(CommandHandler("soul", set_soul))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message, block=False))
 
+    application.add_handler(CommandHandler("souls", set_soul))  # Меню с кнопками выбора души
+    application.add_handler(CommandHandler("soul", set_soul_manual))  # Ручной ввод души
+
+    
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Обработка сообщений
     try:
         application.run_polling()
     except Exception as e:
