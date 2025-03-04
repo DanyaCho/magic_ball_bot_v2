@@ -72,13 +72,16 @@ async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Использование: /soul имя_души (oracle, trainer, philosopher, hooligan)")
         return
 
-    soul_choice = context.args[0].lower()
+    """Обрабатывает нажатие на кнопку с выбором души."""
+    soul_choice = update.message.text.lower()
+
     if soul_choice in config["characters"]:
         context.user_data["mode"] = soul_choice
-        await update.message.reply_text(f"Теперь ты говоришь с {config['characters'][soul_choice]['name']}!")
+        soul_name = config["characters"][soul_choice]["name"]
+        await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
         logger.info(f"Пользователь {update.message.from_user.id} выбрал душу: {soul_choice}")
     else:
-        await update.message.reply_text("Такой души нет. Доступные: oracle, trainer, philosopher, hooligan")
+        await update.message.reply_text("Такой души нет. Используйте /souls для выбора.")
 
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, telegram_id, context):
