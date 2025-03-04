@@ -63,6 +63,11 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Команда /soul - выбор персонажа
 async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Вызывает клавиатуру для выбора души."""
+    keyboard = [[name] for name in config["characters"].keys()]  # Делаем кнопки из списка душ
+    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+    
+    await update.message.reply_text("Выбери душу:", reply_markup=reply_markup)
     if not context.args:
         await update.message.reply_text("Использование: /soul имя_души (oracle, trainer, philosopher, hooligan)")
         return
