@@ -61,6 +61,20 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(config["messages"]["magic_ball_mode"])
     logger.info(f"Пользователь {update.message.from_user.id} переключился в режим Магического шара")
 
+# Команда /soul - выбор персонажа
+async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Использование: /soul имя_души (oracle, trainer, philosopher, hooligan)")
+        return
+
+    soul_choice = context.args[0].lower()
+    if soul_choice in config["characters"]:
+        context.user_data["mode"] = soul_choice
+        await update.message.reply_text(f"Теперь ты говоришь с {config['characters'][soul_choice]['name']}!")
+        logger.info(f"Пользователь {update.message.from_user.id} выбрал душу: {soul_choice}")
+    else:
+        await update.message.reply_text("Такой души нет. Доступные: oracle, trainer, philosopher, hooligan")
+
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, telegram_id, context):
     now = datetime.now()
@@ -98,23 +112,29 @@ async def generate_magic_ball_response(question, telegram_id, context):
 
     return response
 
-# Генерация ответа для Оракула
-async def generate_oracle_response(question):
-    logger.info(f"Запрос в OpenAI для Оракула: {question}")
+# Генерация ответа для Душ
+async def generate_soul_response(question, mode):
+    characters = config.get("characters", {})
+    soul = characters.get(mode, characters.get("oracle"))  # Если нет, то дефолтный Оракул
+    
+    soul_name = soul.get("name", "Неизвестная Душа")
+    soul_description = soul.get("description", "Отвечай в своей уникальной манере.")
+
+    logger.info(f"Запрос в OpenAI для {soul_name}: {question}")
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": config["oracle_description"]},
+                {"role": "system", "content": soul_description},
                 {"role": "user", "content": question}
             ]
         )
-        response = openai_response["choices"][0]["message"]["content"]
-        logger.info(f"Ответ Оракула: {response.strip()}")
-        return response.strip()
+        response = openai_response["choices"][0]["message"]["content"].strip()
+        logger.info(f"Ответ {soul_name}: {response}")
+        return f"{soul_name} говорит:\n{response}"
     except openai.error.OpenAIError as e:
         logger.error(f"Ошибка OpenAI: {e}")
-        return config["messages"]["oracle_error"]
+        return f"{soul_name} говорит:\n" + config["messages"]["oracle_error"]
 
 def is_pure_text(text):
     """Проверяет, состоит ли сообщение только из букв, цифр, пробелов и знаков препинания."""
@@ -131,84 +151,45 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = user_message.lower()
     logger.info(f"Получено сообщение от пользователя {update.message.from_user.id}: {user_message}")
 
-    # Получаем информацию о пользователе из базы
     telegram_id = update.message.from_user.id
     user_data = database.get_user(telegram_id)
 
     if not user_data:
-        # Если пользователя нет в базе – добавляем
         database.add_user(telegram_id, update.message.from_user.username)
         user_data = database.get_user(telegram_id)
 
-    # Если по какой-то причине `get_user` вернул None, сразу возвращаем ошибку
     if not user_data:
         logger.error(f"Ошибка получения данных пользователя {telegram_id} после добавления!")
         await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
         return
 
-    is_premium = user_data[3] if user_data[3] is not None else False  # Если None, значит не премиум
-    free_answers_left = user_data[4] if user_data[4] is not None else 3  # Если None, ставим 3 бесплатных запроса
+    is_premium = user_data[3] if user_data[3] is not None else False
+    free_answers_left = user_data[4] if user_data[4] is not None else 3
 
-    # Если у пользователя нет подписки и закончились бесплатные ответы
     if not is_premium and free_answers_left <= 0:
         logger.info(f"Пользователь {telegram_id} исчерпал лимит бесплатных ответов.")
-        await update.message.reply_text(
-            "Ваши бесплатные запросы закончились. Оформите подписку, чтобы продолжить пользоваться ботом."
-        )
-        return  # Прекращаем обработку сообщения
+        await update.message.reply_text("Ваши бесплатные запросы закончились. Оформите подписку, чтобы продолжить.")
+        return
 
-    # Если у пользователя нет подписки – уменьшаем счетчик
     if not is_premium:
         logger.info(f"Попытка уменьшить free_answers_left для {telegram_id}")
         database.decrease_free_answers(telegram_id)
-
-        # Перезапрашиваем данные
         user_data = database.get_user(telegram_id)
         free_answers_left = user_data[4] if user_data[4] is not None else 0
         logger.info(f"После уменьшения у {telegram_id} осталось {free_answers_left} бесплатных запросов")
-    
-    # Перезапрашиваем данные из базы, чтобы обновить `free_answers_left`
-    user_data = database.get_user(telegram_id)
-    free_answers_left = user_data[4]  # Теперь получаем обновленное значение
 
-    # Если осталось мало бесплатных запросов – предупреждаем
-    if free_answers_left in [1, 2]:
-        await update.message.reply_text(
-            f"У вас осталось {free_answers_left} бесплатных запроса. После этого доступ будет ограничен."
-        )
+    if not is_premium and free_answers_left in [1, 2]:
+        await update.message.reply_text(f"У вас осталось {free_answers_left} бесплатных запроса.")
 
-    # Проверка на активацию скрытого режима
-    if user_message == config["hidden_mode_trigger"]:
-        # Сохраняем предыдущий режим для последующего восстановления
-        context.user_data["previous_mode"] = context.user_data.get("mode", "magic_ball")
-        context.user_data["mode"] = "hidden"
-        context.user_data["hidden_mode_index"] = 0
-        await update.message.reply_text(config["messages"]["hidden_mode_activated"])
-        return
+    mode = context.user_data.get("mode", "oracle")  # По умолчанию – Оракул
 
-    mode = context.user_data.get("mode", "magic_ball")
     if mode == "magic_ball":
-        response = await generate_magic_ball_response(user_message, update.message.from_user.id, context)
-    elif mode == "oracle":
-        response = await generate_oracle_response(user_message)
-    elif mode == "hidden":
-        hidden_responses = config["hidden_mode_responses"]
-        index = context.user_data.get("hidden_mode_index", 0)
-        response = hidden_responses[index]
-        context.user_data["hidden_mode_index"] = (index + 1) % len(hidden_responses)
-        # После последнего ответа в скрытом режиме восстанавливаем предыдущий режим
-        if index == len(hidden_responses) - 1:
-            restored_mode = context.user_data.get("previous_mode", "magic_ball")
-            context.user_data["mode"] = restored_mode
-            context.user_data.pop("previous_mode", None)
-            await update.message.reply_text(config["messages"]["hidden_mode_deactivated"])
+        response = await generate_magic_ball_response(user_message, telegram_id, context)
     else:
-        response = config["messages"]["unknown_mode"]
+        response = await generate_soul_response(user_message, mode)
 
-    # Вставляем перед отправкой сообщения пользователю
-    database.log_message(update.message.from_user.id, user_message, response, mode)
-
-    logger.info(f"Финальный ответ пользователю {update.message.from_user.id}: {response}")
+    database.log_message(telegram_id, user_message, response, mode)
+    logger.info(f"Финальный ответ пользователю {telegram_id}: {response}")
     await update.message.reply_text(response)
 
 # Настройка команд меню
@@ -229,6 +210,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
+    application.add_handler(CommandHandler("soul", set_soul))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message, block=False))
 
     try:
