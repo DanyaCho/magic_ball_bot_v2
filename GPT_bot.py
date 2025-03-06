@@ -68,7 +68,12 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Отправляет клавиатуру с кнопками выбора души
 async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Вызывает клавиатуру для выбора души."""
-    keyboard = [[KeyboardButton(name)] for name in config["characters"].keys()]
+    characters = config.get("characters", {})
+    if not characters:
+        await update.message.reply_text("Ошибка: список душ не загружен.")
+        return
+
+    keyboard = [[KeyboardButton(name)] for name in characters.keys()]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
     
     await update.message.reply_text("Выбери душу:", reply_markup=reply_markup)
@@ -76,11 +81,16 @@ async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обрабатывает выбор души из клавиатуры
 async def select_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает нажатие на кнопку с выбором души."""
+    characters = config.get("characters", {})
+    if not characters:
+        await update.message.reply_text("Ошибка: список душ не загружен.")
+        return
+
     soul_choice = update.message.text.lower().strip()
 
-    if soul_choice in config.get("characters", {}):
+    if soul_choice in characters:
         context.user_data["mode"] = soul_choice
-        soul_name = config["characters"][soul_choice]["name"]
+        soul_name = characters[soul_choice]["name"]
         await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
         logger.info(f"Пользователь {update.message.from_user.id} выбрал душу: {soul_choice}")
     else:
@@ -89,15 +99,20 @@ async def select_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Выбор души через команду /soul имя_души
 async def set_soul_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Меняет душу вручную, если передан аргумент."""
+    characters = config.get("characters", {})
+    if not characters:
+        await update.message.reply_text("Ошибка: список душ не загружен.")
+        return
+
     if not context.args:
         await update.message.reply_text("Использование: /soul имя_души (oracle, trainer, philosopher, hooligan)")
         return
 
     soul_choice = context.args[0].lower().strip()
 
-    if soul_choice in config.get("characters", {}):
+    if soul_choice in characters:
         context.user_data["mode"] = soul_choice
-        soul_name = config["characters"][soul_choice]["name"]
+        soul_name = characters[soul_choice]["name"]
         await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
         logger.info(f"Пользователь {update.message.from_user.id} выбрал душу: {soul_choice}")
     else:
@@ -171,7 +186,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Проверяем, что это выбор души
     if user_message in config.get("characters", {}):
-        await select_soul(update, context)
+        soul_choice = context.args[0].lower().strip()
+
+    if soul_choice in config["characters"]:
+        context.user_data["mode"] = soul_choice
+        soul_name = config["characters"][soul_choice]["name"]
+        await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
+        logger.info(f"Пользователь {update.message.from_user.id} выбрал душу: {soul_choice}")
+    else:
+        await update.message.reply_text("Такой души нет. Используйте /souls для выбора.")
         return
 
     # Проверяем, что сообщение состоит только из текста
@@ -243,7 +266,12 @@ def main():
     application.add_handler(CommandHandler("magicball", magicball))
     application.add_handler(CommandHandler("souls", set_soul))  # Меню с кнопками выбора души
     application.add_handler(CommandHandler("soul", set_soul_manual))  # Ручной ввод души
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Обработка сообщений
+
+    # ✅ Добавляем обработчик для нажатия кнопок выбора души
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, select_soul))
+
+    # ✅ Обработка обычных сообщений
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     try:
         application.run_polling()
