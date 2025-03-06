@@ -67,13 +67,22 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Отправляет клавиатуру с кнопками выбора души
 async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Вызывает клавиатуру для выбора души."""
-    characters = config.get("characters", {})
-    if not characters:
-        await update.message.reply_text("Ошибка: список душ не загружен.")
+    """Отображает список доступных душ"""
+    telegram_id = update.message.from_user.id
+    user_data = database.get_user(telegram_id)
+    if not user_data:
+        await update.message.reply_text("Ошибка доступа к данным.")
         return
 
-    keyboard = [[KeyboardButton(name)] for name in characters.keys()]
+    user_id = user_data[0]
+    unlocked_souls = database.get_unlocked_souls(user_id)
+
+    if not unlocked_souls:
+        await update.message.reply_text("У тебя пока нет разблокированных душ. Введи название души, чтобы разблокировать её!")
+        return
+
+    # Генерируем кнопки только для доступных душ
+    keyboard = [[KeyboardButton(soul)] for soul in unlocked_souls]
     reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
     
     await update.message.reply_text("Выбери душу:", reply_markup=reply_markup)
@@ -81,20 +90,23 @@ async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обрабатывает выбор души из клавиатуры
 async def select_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает нажатие на кнопку с выбором души."""
-    characters = config.get("characters", {})
-    if not characters:
-        await update.message.reply_text("Ошибка: список душ не загружен.")
+    soul_choice = update.message.text.lower().strip()
+    telegram_id = update.message.from_user.id
+
+    user_data = database.get_user(telegram_id)
+    if not user_data:
+        await update.message.reply_text("Ошибка доступа к данным.")
         return
 
-    soul_choice = update.message.text.lower().strip()
+    user_id = user_data[0]
+    unlocked_souls = database.get_unlocked_souls(user_id)
 
-    if soul_choice in characters:
+    if soul_choice in unlocked_souls:
         context.user_data["mode"] = soul_choice
-        soul_name = characters[soul_choice]["name"]
+        soul_name = config["characters"][soul_choice]["name"]
         await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
-        logger.info(f"Пользователь {update.message.from_user.id} выбрал душу: {soul_choice}")
     else:
-        await update.message.reply_text("Такой души нет. Используйте /souls для выбора.")
+        await update.message.reply_text("Ты ещё не разблокировал эту душу. Введи её название, чтобы добавить в список.")
 
 # Выбор души через команду /soul имя_души
 async def set_soul_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -182,65 +194,68 @@ async def generate_soul_response(question, mode):
 
 # Обработка входящих сообщений (включая выбор души)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
+    user_message = update.message.text.lower().strip()
+    telegram_id = update.message.from_user.id
 
-    # Проверяем, что это выбор души
-    if user_message in config.get("characters", {}):
-        soul_choice = context.args[0].lower().strip()
-
-    if soul_choice in config["characters"]:
-        context.user_data["mode"] = soul_choice
-        soul_name = config["characters"][soul_choice]["name"]
-        await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
-        logger.info(f"Пользователь {update.message.from_user.id} выбрал душу: {soul_choice}")
-    else:
-        await update.message.reply_text("Такой души нет. Используйте /souls для выбора.")
+    # Получаем `id` пользователя
+    user_data = database.get_user(telegram_id)
+    if not user_data:
+        database.add_user(telegram_id, update.message.from_user.username)
+        user_data = database.get_user(telegram_id)
+    if not user_data:
+        await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
         return
+
+    user_id = user_data[0]  # ID пользователя в базе
+
+    # Проверяем, является ли сообщение названием души
+    if user_message in config["characters"]:
+        unlocked_souls = database.get_unlocked_souls(user_id)
+
+        if user_message not in unlocked_souls:
+            if database.unlock_soul(user_id, user_message):
+                await update.message.reply_text(f"Ты разблокировал душу: {config['characters'][user_message]['name']}!")
+            else:
+                await update.message.reply_text("Эта душа уже у тебя есть.")
+        return  # Завершаем обработку, так как душа была добавлена
 
     # Проверяем, что сообщение состоит только из текста
     if not is_pure_text(user_message):
         return  # Игнорируем сообщения с эмодзи, вложениями и т.д.
 
-    user_message = user_message.lower()
-    logger.info(f"Получено сообщение от пользователя {update.message.from_user.id}: {user_message}")
+    logger.info(f"Получено сообщение от пользователя {telegram_id}: {user_message}")
 
-    telegram_id = update.message.from_user.id
-    user_data = database.get_user(telegram_id)
-
-    if not user_data:
-        database.add_user(telegram_id, update.message.from_user.username)
-        user_data = database.get_user(telegram_id)
-
-    if not user_data:
-        logger.error(f"Ошибка получения данных пользователя {telegram_id} после добавления!")
-        await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
-        return
-
+    # Получаем статус подписки и лимиты
     is_premium = user_data[3] if user_data[3] is not None else False
     free_answers_left = user_data[4] if user_data[4] is not None else 3
 
+    # Если лимит бесплатных запросов исчерпан
     if not is_premium and free_answers_left <= 0:
         logger.info(f"Пользователь {telegram_id} исчерпал лимит бесплатных ответов.")
         await update.message.reply_text("Ваши бесплатные запросы закончились. Оформите подписку, чтобы продолжить.")
         return
 
+    # Уменьшаем количество бесплатных запросов
     if not is_premium:
-        logger.info(f"Попытка уменьшить free_answers_left для {telegram_id}")
         database.decrease_free_answers(telegram_id)
         user_data = database.get_user(telegram_id)
         free_answers_left = user_data[4] if user_data[4] is not None else 0
         logger.info(f"После уменьшения у {telegram_id} осталось {free_answers_left} бесплатных запросов")
 
+    # Если осталось мало бесплатных запросов – предупреждаем
     if not is_premium and free_answers_left in [1, 2]:
         await update.message.reply_text(f"У вас осталось {free_answers_left} бесплатных запроса.")
 
-    mode = context.user_data.get("mode", "oracle")  # По умолчанию – Оракул
+    # Определяем текущий режим (по умолчанию – Оракул)
+    mode = context.user_data.get("mode", "oracle")
 
+    # Обрабатываем сообщение в зависимости от режима
     if mode == "magic_ball":
         response = await generate_magic_ball_response(user_message, telegram_id, context)
     else:
         response = await generate_soul_response(user_message, mode)
 
+    # Логируем сообщение и отправляем ответ
     database.log_message(telegram_id, user_message, response, mode)
     logger.info(f"Финальный ответ пользователю {telegram_id}: {response}")
     await update.message.reply_text(response)
@@ -264,14 +279,9 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
+
     application.add_handler(CommandHandler("souls", set_soul))  # Меню с кнопками выбора души
-    application.add_handler(CommandHandler("soul", set_soul_manual))  # Ручной ввод души
-
-    # ✅ Добавляем обработчик для нажатия кнопок выбора души
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, select_soul))
-
-    # ✅ Обработка обычных сообщений
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))  # Обработка сообщений
 
     try:
         application.run_polling()
