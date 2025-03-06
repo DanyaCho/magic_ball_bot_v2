@@ -134,3 +134,38 @@ def decrease_free_answers(telegram_id):
         logger.error(f"Ошибка при уменьшении количества бесплатных ответов {telegram_id}: {e}")
     finally:
         conn.close()
+
+
+def unlock_soul(user_id, soul_name):
+    """Добавляет душу в список доступных для пользователя."""
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+
+    # Проверяем, есть ли уже такая душа у пользователя
+    cur.execute("SELECT * FROM user_souls WHERE user_id = %s AND soul_name = %s", (user_id, soul_name))
+    if cur.fetchone():
+        cur.close()
+        conn.close()
+        return False  # Душа уже разблокирована
+
+    # Добавляем новую душу
+    cur.execute(
+        "INSERT INTO user_souls (user_id, soul_name, unlocked_at) VALUES (%s, %s, %s)",
+        (user_id, soul_name, datetime.datetime.now()),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return True  # Душа успешно добавлена
+
+def get_unlocked_souls(user_id):
+    """Возвращает список разблокированных душ пользователя."""
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+
+    cur.execute("SELECT soul_name FROM user_souls WHERE user_id = %s", (user_id,))
+    souls = [row[0] for row in cur.fetchall()]
+
+    cur.close()
+    conn.close()
+    return souls  # Возвращает список имен душ
