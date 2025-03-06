@@ -37,6 +37,10 @@ except json.JSONDecodeError as e:
     logger.error(f"Ошибка при разборе config.json: {e}")
     exit(1)
 
+def is_pure_text(text):
+    """Проверяет, состоит ли сообщение только из букв, цифр, пробелов и знаков препинания."""
+    return bool(regex.fullmatch(r"[\p{L}\p{N}\p{P}\s]+", text))  # `\p{L}` - буквы, `\p{N}` - цифры, `\p{P}` - знаки
+
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -160,9 +164,6 @@ async def generate_soul_response(question, mode):
         logger.error(f"Ошибка OpenAI: {e}")
         return f"{soul_name} говорит:\n{config['messages']['oracle_error']}"
 
-def is_pure_text(text):
-    """Проверяет, состоит ли сообщение только из букв, цифр, пробелов и знаков препинания."""
-    return bool(regex.fullmatch(r"[\p{L}\p{N}\p{P}\s]+", text))  # `\p{L}` - буквы, `\p{N}` - цифры, `\p{P}` - знаки
 
 # Обработка входящих сообщений (включая выбор души)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
