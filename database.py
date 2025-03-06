@@ -151,7 +151,7 @@ def unlock_soul(user_id, soul_name):
     # Добавляем новую душу
     cur.execute(
         "INSERT INTO user_souls (user_id, soul_name, unlocked_at) VALUES (%s, %s, %s)",
-        (user_id, soul_name, datetime.datetime.now()),
+        (user_id, soul_name, datetime.now()),
     )
     conn.commit()
     cur.close()
