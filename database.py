@@ -27,9 +27,9 @@ def get_db_connection():
 
 # Добавление пользователя
 def add_user(telegram_id, username):
+    """Добавляет нового пользователя в БД, если его там нет"""
     conn = get_db_connection()
     if not conn:
-        logger.error(f"Нет подключения к базе для пользователя {telegram_id}")
         return
 
     try:
@@ -37,16 +37,13 @@ def add_user(telegram_id, username):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO users (telegram_id, username, created_at) 
-                    VALUES (%s, %s, %s) 
+                    INSERT INTO users (telegram_id, username, premium, free_answers_left, created_at) 
+                    VALUES (%s, %s, %s, %s, %s) 
                     ON CONFLICT (telegram_id) DO NOTHING;
                     """,
-                    (telegram_id, username, datetime.utcnow()),
+                    (telegram_id, username, False, 5, datetime.utcnow()),
                 )
-                if cur.rowcount > 0:
-                    logger.info(f"Добавлен новый пользователь {telegram_id} ({username}) в БД.")
-                else:
-                    logger.warning(f"Пользователь {telegram_id} уже есть в БД.")
+                logger.info(f"Добавлен пользователь {telegram_id} ({username}) в БД.")
     except psycopg2.Error as e:
         logger.error(f"Ошибка при добавлении пользователя {telegram_id}: {e}")
     finally:
