@@ -185,10 +185,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         database.add_user(user_id, update.message.from_user.username)
         user_data = database.get_user(user_id)
 
-    if not user_data:
-        logger.error(f"Ошибка получения данных пользователя {user_id} после добавления!")
-        await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
-        return
+        if not user_data:  # <-- Повторная проверка
+            logger.error(f"Не удалось добавить пользователя {user_id} в базу!")
+            await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
+            return
 
     # Проверяем, есть ли у пользователя уже разблокированные души
     unlocked_souls = database.get_user_souls(user_id)
