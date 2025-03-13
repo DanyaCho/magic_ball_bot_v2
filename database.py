@@ -48,6 +48,27 @@ def add_user(telegram_id, username):
     finally:
         conn.close()
 
+def get_user(telegram_id):
+    """Получает информацию о пользователе по его Telegram ID."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, telegram_id, username, is_premium, free_answers_left, created_at FROM users WHERE telegram_id = %s",
+                    (telegram_id,),
+                )
+                return cur.fetchone()
+    except psycopg2.Error as e:
+        logger.error(f"Ошибка при получении данных пользователя {telegram_id}: {e}")
+        return None
+    finally:
+        conn.close()
+        
+
 # Получение разблокированных душ пользователя
 def get_user_souls(user_id):
     """Получает список разблокированных душ пользователя."""
