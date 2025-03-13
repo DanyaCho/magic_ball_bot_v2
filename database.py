@@ -58,7 +58,7 @@ def get_user(telegram_id):
     try:
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, telegram_id, username, premium, free_answers_left, created_at FROM users WHERE telegram_id = %s",
+            "SELECT id, telegram_id, username, premium, COALESCE(free_answers_left, 0), created_at FROM users WHERE telegram_id = %s",
             (telegram_id,),
         )
         return cur.fetchone()
