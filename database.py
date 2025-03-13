@@ -48,42 +48,47 @@ def add_user(telegram_id, username):
     finally:
         conn.close()
 
-# Получение пользователя
-def get_user(telegram_id):
-    conn = get_db_connection()
-    if not conn:
-        return None
-
+# Получение разблокированных душ пользователя
+def get_user_souls(user_id):
+    """Получает список разблокированных душ пользователя."""
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM users WHERE telegram_id = %s;", (telegram_id,))
-            user = cur.fetchone()
-            logger.info(f"Запрос информации о пользователе {telegram_id}: {user}")
-            return user
-    except psycopg2.Error as e:
-        logger.error(f"Ошибка при получении пользователя {telegram_id}: {e}")
-        return None
-    finally:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT soul_name FROM user_souls WHERE user_id = (SELECT id FROM users WHERE telegram_id = %s)", (user_id,))
+        souls = [row[0] for row in cur.fetchall()]
         conn.close()
+        return souls
+    except Exception as e:
+        logger.error(f"Ошибка получения душ для {user_id}: {e}")
+        return []
 
-# Обновление режима подписки
-def update_user_subscription(telegram_id, premium_status):
-    conn = get_db_connection()
-    if not conn:
-        return
-
+# Разблокировка души
+def unlock_soul(user_id, soul_name):
+    """Разблокирует душу для пользователя, если её ещё нет."""
     try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE users SET premium = %s WHERE telegram_id = %s;",
-                    (premium_status, telegram_id),
-                )
-                logger.info(f"Пользователь {telegram_id} теперь {'премиум' if premium_status else 'обычный'}.")
-    except psycopg2.Error as e:
-        logger.error(f"Ошибка при обновлении подписки пользователя {telegram_id}: {e}")
-    finally:
-        conn.close()
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM users WHERE telegram_id = %s", (user_id,))
+        user_row = cur.fetchone()
+
+        if user_row:
+            db_user_id = user_row[0]
+
+            # Проверяем, есть ли уже эта душа у пользователя
+            cur.execute("SELECT * FROM user_souls WHERE user_id = %s AND soul_name = %s", (db_user_id, soul_name))
+            if cur.fetchone():
+                conn.close()
+                return False  # Душа уже открыта
+
+            # Добавляем новую душу
+            cur.execute("INSERT INTO user_souls (user_id, soul_name, unlocked_at) VALUES (%s, %s, %s)",
+                        (db_user_id, soul_name, datetime.utcnow()))
+            conn.commit()
+            conn.close()
+            return True  # Душа разблокирована
+    except Exception as e:
+        logger.error(f"Ошибка разблокировки души {soul_name} для {user_id}: {e}")
+        return False
 
 # Функция для записи сообщений в лог
 def log_message(telegram_id, message_text, response_text, mode):
@@ -134,38 +139,3 @@ def decrease_free_answers(telegram_id):
         logger.error(f"Ошибка при уменьшении количества бесплатных ответов {telegram_id}: {e}")
     finally:
         conn.close()
-
-
-def unlock_soul(user_id, soul_name):
-    """Добавляет душу в список доступных для пользователя."""
-    conn = psycopg2.connect(DATABASE_URL)
-    cur = conn.cursor()
-
-    # Проверяем, есть ли уже такая душа у пользователя
-    cur.execute("SELECT * FROM user_souls WHERE user_id = %s AND soul_name = %s", (user_id, soul_name))
-    if cur.fetchone():
-        cur.close()
-        conn.close()
-        return False  # Душа уже разблокирована
-
-    # Добавляем новую душу
-    cur.execute(
-        "INSERT INTO user_souls (user_id, soul_name, unlocked_at) VALUES (%s, %s, %s)",
-        (user_id, soul_name, datetime.now()),
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
-    return True  # Душа успешно добавлена
-
-def get_unlocked_souls(user_id):
-    """Возвращает список разблокированных душ пользователя."""
-    conn = psycopg2.connect(DATABASE_URL)
-    cur = conn.cursor()
-
-    cur.execute("SELECT soul_name FROM user_souls WHERE user_id = %s", (user_id,))
-    souls = [row[0] for row in cur.fetchall()]
-
-    cur.close()
-    conn.close()
-    return souls  # Возвращает список имен душ
