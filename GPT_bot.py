@@ -194,16 +194,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     unlocked_souls = database.get_user_souls(user_id)
 
     # Если пользователь ввел название души, проверяем, можно ли её разблокировать
-    if user_message in config.get("characters", {}):
-    if user_message not in unlocked_souls:
-        if database.unlock_soul(user_id, user_message):
-            unlocked_souls.append(user_message)
-            context.user_data["mode"] = user_message  # <-- Сразу переключаем
-            logger.info(f"Пользователь {user_id} разблокировал новую душу: {user_message}.")
-            await update.message.reply_text(f"Ты разблокировал душу: {config['characters'][user_message]['name']}!\nТеперь ты говоришь с ней!")
-        else:
-            await update.message.reply_text("Не удалось разблокировать душу.")
-        return
+    if user_message in config.get("characters", {}):  # <-- здесь был неверный отступ
+        if user_message not in unlocked_souls:  # <-- этот `if` должен быть внутри первого
+            if database.unlock_soul(user_id, user_message):
+                unlocked_souls.append(user_message)
+                context.user_data["mode"] = user_message  # <-- Сразу переключаем
+                logger.info(f"Пользователь {user_id} разблокировал новую душу: {user_message}.")
+                await update.message.reply_text(f"Ты разблокировал душу: {config['characters'][user_message]['name']}!\nТеперь ты говоришь с ней!")
+            else:
+                await update.message.reply_text("Не удалось разблокировать душу.")
+            return
 
     # Если душа уже разблокирована — просто переключаемся на неё
     context.user_data["mode"] = user_message
