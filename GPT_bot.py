@@ -75,7 +75,7 @@ async def set_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_id = user_data[0]
-    unlocked_souls = database.get_unlocked_souls(user_id)
+    unlocked_souls = database.get_user_souls(user_id)
 
     if not unlocked_souls:
         await update.message.reply_text("У тебя пока нет разблокированных душ. Введи название души, чтобы разблокировать её!")
@@ -99,7 +99,7 @@ async def select_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_id = user_data[0]
-    unlocked_souls = database.get_unlocked_souls(user_id)
+    unlocked_souls = database.get_user_souls(user_id)
 
     if soul_choice in unlocked_souls:
         context.user_data["mode"] = soul_choice
@@ -107,28 +107,6 @@ async def select_soul(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
     else:
         await update.message.reply_text("Ты ещё не разблокировал эту душу. Введи её название, чтобы добавить в список.")
-
-# Выбор души через команду /soul имя_души
-async def set_soul_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Меняет душу вручную, если передан аргумент."""
-    characters = config.get("characters", {})
-    if not characters:
-        await update.message.reply_text("Ошибка: список душ не загружен.")
-        return
-
-    if not context.args:
-        await update.message.reply_text("Использование: /soul имя_души (oracle, trainer, philosopher, hooligan)")
-        return
-
-    soul_choice = context.args[0].lower().strip()
-
-    if soul_choice in characters:
-        context.user_data["mode"] = soul_choice
-        soul_name = characters[soul_choice]["name"]
-        await update.message.reply_text(f"Теперь ты говоришь с {soul_name}!")
-        logger.info(f"Пользователь {update.message.from_user.id} выбрал душу: {soul_choice}")
-    else:
-        await update.message.reply_text("Такой души нет. Используйте /souls для выбора.")
 
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, telegram_id, context):
@@ -194,77 +172,65 @@ async def generate_soul_response(question, mode):
 
 # Обработка входящих сообщений (включая выбор души)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text.lower().strip()
-    telegram_id = update.message.from_user.id
-
-    # Получаем `id` пользователя
-    user_data = database.get_user(telegram_id)
-    if not user_data:
-        database.add_user(telegram_id, update.message.from_user.username)
-        user_data = database.get_user(telegram_id)
-    if not user_data:
-        await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
-        return
-
-    user_id = user_data[0]  # ID пользователя в базе
-
-    # Проверяем, является ли сообщение названием души
-    if user_message in config["characters"]:
-        unlocked_souls = database.get_unlocked_souls(user_id)
-
-        if user_message not in unlocked_souls:
-            if database.unlock_soul(user_id, user_message):
-                await update.message.reply_text(f"Ты разблокировал душу: {config['characters'][user_message]['name']}!")
-            else:
-                await update.message.reply_text("Эта душа уже у тебя есть.")
-        return  # Завершаем обработку, так как душа была добавлена
+    user_message = update.message.text.strip().lower()
 
     # Проверяем, что сообщение состоит только из текста
     if not is_pure_text(user_message):
-        return  # Игнорируем сообщения с эмодзи, вложениями и т.д.
+        return  # Игнорируем сообщения с вложениями, эмодзи и т. д.
 
-    logger.info(f"Получено сообщение от пользователя {telegram_id}: {user_message}")
+    user_id = update.message.from_user.id
+    user_data = database.get_user(user_id)
 
-    # Получаем статус подписки и лимиты
-    is_premium = user_data[3] if user_data[3] is not None else False
-    free_answers_left = user_data[4] if user_data[4] is not None else 3
+    if not user_data:
+        database.add_user(user_id, update.message.from_user.username)
+        user_data = database.get_user(user_id)
 
-    # Если лимит бесплатных запросов исчерпан
-    if not is_premium and free_answers_left <= 0:
-        logger.info(f"Пользователь {telegram_id} исчерпал лимит бесплатных ответов.")
-        await update.message.reply_text("Ваши бесплатные запросы закончились. Оформите подписку, чтобы продолжить.")
+    if not user_data:
+        logger.error(f"Ошибка получения данных пользователя {user_id} после добавления!")
+        await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
         return
 
-    # Уменьшаем количество бесплатных запросов
-    if not is_premium:
-        database.decrease_free_answers(telegram_id)
-        user_data = database.get_user(telegram_id)
-        free_answers_left = user_data[4] if user_data[4] is not None else 0
-        logger.info(f"После уменьшения у {telegram_id} осталось {free_answers_left} бесплатных запросов")
+    # Проверяем, есть ли у пользователя уже разблокированные души
+    unlocked_souls = database.get_user_souls(user_id)
 
-    # Если осталось мало бесплатных запросов – предупреждаем
-    if not is_premium and free_answers_left in [1, 2]:
-        await update.message.reply_text(f"У вас осталось {free_answers_left} бесплатных запроса.")
+    # Если пользователь ввел название души, проверяем, можно ли её разблокировать
+    if user_message in config.get("characters", {}):
+    if user_message not in unlocked_souls:
+        if database.unlock_soul(user_id, user_message):
+            unlocked_souls.append(user_message)
+            context.user_data["mode"] = user_message  # <-- Сразу переключаем
+            logger.info(f"Пользователь {user_id} разблокировал новую душу: {user_message}.")
+            await update.message.reply_text(f"Ты разблокировал душу: {config['characters'][user_message]['name']}!\nТеперь ты говоришь с ней!")
+        else:
+            await update.message.reply_text("Не удалось разблокировать душу.")
+        return
 
-    # Определяем текущий режим (по умолчанию – Оракул)
-    mode = context.user_data.get("mode", "oracle")
+    # Если душа уже разблокирована — просто переключаемся на неё
+    context.user_data["mode"] = user_message
+    logger.info(f"Пользователь {user_id} переключился на душу: {user_message}.")
+    await update.message.reply_text(f"Теперь ты говоришь с {config['characters'][user_message]['name']}!")
+    return
 
-    # Обрабатываем сообщение в зависимости от режима
+    # Работаем с текущим режимом
+    mode = context.user_data.get("mode", "oracle")  # По умолчанию — Оракул
     if mode == "magic_ball":
-        response = await generate_magic_ball_response(user_message, telegram_id, context)
+        response = await generate_magic_ball_response(user_message, user_id, context)
     else:
         response = await generate_soul_response(user_message, mode)
 
-    # Логируем сообщение и отправляем ответ
-    database.log_message(telegram_id, user_message, response, mode)
-    logger.info(f"Финальный ответ пользователю {telegram_id}: {response}")
+    database.log_message(user_id, user_message, response, mode)
     await update.message.reply_text(response)
     
 # Настройка команд меню
 async def set_commands(application):
     logger.info("Бот успешно запущен и готов к работе.")
     try:
-        commands = [BotCommand(cmd["command"], cmd["description"]) for cmd in config["commands"]]
+        commands = [
+            BotCommand("start", "Начать работу с ботом"),
+            BotCommand("oracle", "Переключиться в режим Оракула"),
+            BotCommand("magicball", "Переключиться в режим Магического шара"),
+            BotCommand("souls", "Выбрать доступную душу"),
+        ]
         await application.bot.set_my_commands(commands)
         logging.info("Команды успешно установлены.")
     except Exception as e:
