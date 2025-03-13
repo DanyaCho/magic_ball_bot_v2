@@ -51,13 +51,16 @@ def add_user(telegram_id, username):
 # Получение разблокированных душ пользователя
 def get_user_souls(user_id):
     """Получает список разблокированных душ пользователя."""
+    conn = get_db_connection()
+    if not conn:
+        return []
+    
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT soul_name FROM user_souls WHERE user_id = (SELECT id FROM users WHERE telegram_id = %s)", (user_id,))
-        souls = [row[0] for row in cur.fetchall()]
-        conn.close()
-        return souls
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT soul_name FROM user_souls WHERE user_id = (SELECT id FROM users WHERE telegram_id = %s)", (user_id,))
+                souls = [row[0] for row in cur.fetchall()]
+                return souls
     except Exception as e:
         logger.error(f"Ошибка получения душ для {user_id}: {e}")
         return []
