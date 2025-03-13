@@ -180,10 +180,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.message.from_user.id
     user_data = database.get_user(user_id)
+    print("DEBUG:", user_data)
 
     if not user_data:
         database.add_user(user_id, update.message.from_user.username)
         user_data = database.get_user(user_id)
+        print("DEBUG:", user_data)
 
         if not user_data:  # <-- Повторная проверка
             logger.error(f"Не удалось добавить пользователя {user_id} в базу!")
