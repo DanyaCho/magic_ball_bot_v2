@@ -55,13 +55,14 @@ def get_user(telegram_id):
         return None
 
     try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, telegram_id, username, is_premium, free_answers_left, created_at FROM users WHERE telegram_id = %s",
-                    (telegram_id,),
-                )
-                return cur.fetchone()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, telegram_id, username, is_premium, free_answers_left, created_at FROM users WHERE telegram_id = %s",
+            (telegram_id,),
+        )
+        user = cur.fetchone()
+        cur.close()
+        return user
     except psycopg2.Error as e:
         logger.error(f"Ошибка при получении данных пользователя {telegram_id}: {e}")
         return None
