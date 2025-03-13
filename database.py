@@ -26,8 +26,8 @@ def get_db_connection():
         return None
 
 # Добавление пользователя
+# Добавление пользователя
 def add_user(telegram_id, username):
-    """Добавляет нового пользователя в БД, если его там нет"""
     conn = get_db_connection()
     if not conn:
         return
@@ -43,7 +43,7 @@ def add_user(telegram_id, username):
                     """,
                     (telegram_id, username, False, 5, datetime.utcnow()),
                 )
-                logger.info(f"Добавлен пользователь {telegram_id} ({username}) в БД.")
+                logger.info(f"Добавлен пользователь {telegram_id} ({username}) в БД с premium=False и 5 бесплатными ответами.")
     except psycopg2.Error as e:
         logger.error(f"Ошибка при добавлении пользователя {telegram_id}: {e}")
     finally:
