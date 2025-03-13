@@ -78,14 +78,16 @@ def get_user_souls(user_id):
         return []
     
     try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT soul_name FROM user_souls WHERE user_id = (SELECT id FROM users WHERE telegram_id = %s)", (user_id,))
-                souls = [row[0] for row in cur.fetchall()]
-                return souls
+        cur = conn.cursor()
+        cur.execute("SELECT soul_name FROM user_souls WHERE user_id = (SELECT id FROM users WHERE telegram_id = %s)", (user_id,))
+        souls = [row[0] for row in cur.fetchall()]
+        cur.close()
+        return souls
     except Exception as e:
         logger.error(f"Ошибка получения душ для {user_id}: {e}")
         return []
+    finally:
+        conn.close()
 
 # Разблокировка души
 def unlock_soul(user_id, soul_name):
