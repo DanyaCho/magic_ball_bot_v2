@@ -192,6 +192,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Ошибка доступа к данным. Попробуйте позже.")
             return
 
+    # Проверяем, что сообщение состоит только из текста (не команда, не вложение)
+    if not is_pure_text(user_message):
+        return  # Игнорируем сообщения с вложениями, эмодзи и т. д.
+
+    # Работаем с текущим режимом
+    mode = context.user_data.get("mode", "oracle")  # По умолчанию — Оракул
+
+    # Если режим Оракула или Магического шара — передаем сообщение в соответствующую функцию
+    if mode == "magic_ball":
+        response = await generate_magic_ball_response(user_message, user_id, context)
+    elif mode == "oracle" or mode in config["characters"]:
+        response = await generate_soul_response(user_message, mode)
+        database.log_message(user_id, user_message, response, mode)
+        await update.message.reply_text(response)
+        return  # Завершаем обработку сообщения, чтобы оно не проверялось дальше
+
+
     # Проверяем, есть ли у пользователя уже разблокированные души
     unlocked_souls = database.get_user_souls(user_id)
 
