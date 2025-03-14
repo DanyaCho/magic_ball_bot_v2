@@ -212,12 +212,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверяем, есть ли у пользователя уже разблокированные души
     unlocked_souls = database.get_user_souls(user_id)
 
-    # Если пользователь ввел название души, проверяем, можно ли её разблокировать
-    if user_message in config.get("characters", {}):  # <-- здесь был неверный отступ
-        if user_message not in unlocked_souls:  # <-- этот `if` должен быть внутри первого
+    # Проверяем, является ли сообщение названием души (а не обычным текстом)
+    if user_message in config["characters"] and context.user_data.get("mode") == "soul_selection":
+        if user_message not in unlocked_souls:
             if database.unlock_soul(user_id, user_message):
                 unlocked_souls.append(user_message)
-                context.user_data["mode"] = user_message  # <-- Сразу переключаем
+                context.user_data["mode"] = user_message
                 logger.info(f"Пользователь {user_id} разблокировал новую душу: {user_message}.")
                 await update.message.reply_text(f"Ты разблокировал душу: {config['characters'][user_message]['name']}!\nТеперь ты говоришь с ней!")
             else:
