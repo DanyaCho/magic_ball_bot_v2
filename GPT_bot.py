@@ -213,7 +213,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     unlocked_souls = database.get_user_souls(user_id)
 
     # Проверяем, является ли сообщение названием души (а не обычным текстом)
-    if user_message in config["characters"] and context.user_data.get("mode") == "soul_selection":
+    if context.user_data.get("mode") == "soul_selection":
+        if user_message in config["characters"]:
+            context.user_data["mode"] = user_message
+            await update.message.reply_text(f"Теперь ты говоришь с {config['characters'][user_message]['name']}!")
+        else:
+            await update.message.reply_text("Такой души нет. Попробуйте снова.")
+        return  # После выбора души ничего больше не выполняем
         if user_message not in unlocked_souls:
             if database.unlock_soul(user_id, user_message):
                 unlocked_souls.append(user_message)
