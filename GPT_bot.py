@@ -172,7 +172,9 @@ async def generate_soul_response(question, mode):
 
 # Обработка входящих сообщений (включая выбор души)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text.strip().lower()
+    user_message = update.message.text.lower()
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username
 
     # Проверяем, что сообщение состоит только из текста
     if not is_pure_text(user_message):
@@ -212,29 +214,41 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверяем, есть ли у пользователя уже разблокированные души
     unlocked_souls = database.get_user_souls(user_id)
 
-    # Проверяем, является ли сообщение названием души (а не обычным текстом)
+    # Проверяем, есть ли у пользователя уже разблокированные души
+    unlocked_souls = database.get_user_souls(user_id)
+
+    # Проверяем, находится ли бот в режиме выбора души
     if context.user_data.get("mode") == "soul_selection":
         if user_message in config["characters"]:
+            if user_message not in unlocked_souls:
+                if database.unlock_soul(user_id, user_message):
+                    unlocked_souls.append(user_message)
+                    context.user_data["mode"] = user_message
+                    await update.message.reply_text(
+                        f"Ты разблокировал душу: {config['characters'][user_message]['name']}!\nТеперь ты говоришь с ней!"
+                    )
+                else:
+                    await update.message.reply_text("Не удалось разблокировать душу.")
+                return
+
+            # Если душа уже разблокирована, переключаемся на неё
             context.user_data["mode"] = user_message
             await update.message.reply_text(f"Теперь ты говоришь с {config['characters'][user_message]['name']}!")
         else:
-            await update.message.reply_text("Такой души нет. Попробуйте снова.")
-        return  # После выбора души ничего больше не выполняем
-        if user_message not in unlocked_souls:
-            if database.unlock_soul(user_id, user_message):
-                unlocked_souls.append(user_message)
-                context.user_data["mode"] = user_message
-                logger.info(f"Пользователь {user_id} разблокировал новую душу: {user_message}.")
-                await update.message.reply_text(f"Ты разблокировал душу: {config['characters'][user_message]['name']}!\nТеперь ты говоришь с ней!")
-            else:
-                await update.message.reply_text("Не удалось разблокировать душу.")
-            return
+            await update.message.reply_text("Такой души нет. Пожалуйста, выбери существующую душу.")
+        return
+        # Если сообщение не является названием души, обрабатываем его как обычный вопрос
+        mode = context.user_data.get("mode", "oracle")  # По умолчанию — Оракул
+        if mode == "magic_ball":
+            response = await generate_magic_ball_response(user_message, user_id, context)
+        else:
+            response = await generate_soul_response(user_message, mode)
 
-    # Если душа уже разблокирована — просто переключаемся на неё
-    context.user_data["mode"] = user_message
-    logger.info(f"Пользователь {user_id} переключился на душу: {user_message}.")
-    await update.message.reply_text(f"Теперь ты говоришь с {config['characters'][user_message]['name']}!")
-    return
+        # Логируем сообщение в базе данных
+        database.log_message(user_id, user_message, response, mode)
+
+        # Отправляем ответ пользователю
+        await update.message.reply_text(response)
 
     # Работаем с текущим режимом
     mode = context.user_data.get("mode", "oracle")  # По умолчанию — Оракул
