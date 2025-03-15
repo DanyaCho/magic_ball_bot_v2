@@ -1,39 +1,40 @@
-import random
 import json
 from datetime import datetime
 from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import openai
-from dotenv import load_dotenv
-import os
-import logging
 import database
+import logging
+import openai
+import os
+from dotenv import load_dotenv
 
 # Загрузка переменных окружения
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Настройка OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Настройка логирования
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+# Логирование
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Загрузка конфигурации
 try:
     with open("config.json", "r", encoding="utf-8") as config_file:
         config = json.load(config_file)
-        logger.info("Конфигурация успешно загружена.")
-except (FileNotFoundError, json.JSONDecodeError) as e:
-    logger.error(f"Ошибка при загрузке config.json: {e}")
+except FileNotFoundError:
+    logger.error("Файл config.json не найден.")
+    exit(1)
+except json.JSONDecodeError as e:
+    logger.error(f"Ошибка разбора config.json: {e}")
     exit(1)
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(config["messages"]["start"])
-    context.user_data.clear()
+    logger.info(f"Пользователь {update.message.from_user.id} вызвал команду /start")
 
 # Команда /oracle
 async def oracle(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -47,70 +48,83 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(config["messages"]["magic_ball_mode"])
     logger.info(f"Пользователь {update.message.from_user.id} переключился в режим Магического шара")
 
-# Генерация ответа для Магического Шара
-async def generate_magic_ball_response(question, telegram_id, context):
-    chosen_tone = random.choice(["negative", "positive", "neutral"])
-    response = random.choice(config["magic_ball_responses"].get(chosen_tone, []))
-    logger.info(f"Ответ Магического Шара для {telegram_id}: {response}")
-    return response
+# Команда /buy_premium
+async def buy_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    user_data = database.get_user(user_id)
+    
+    if not user_data:
+        database.add_user(user_id, update.message.from_user.username)
+        user_data = database.get_user(user_id)
+    
+    if user_data[3]:  # Проверка premium (3-й индекс в кортежах users)
+        await update.message.reply_text("У тебя уже есть премиум!")
+        return
+    
+    await update.message.reply_text("Чтобы оформить подписку, перейди по ссылке: https://example.com/payment")
+    logger.info(f"Пользователь {user_id} хочет купить премиум.")
 
-# Генерация ответа для Оракула
-async def generate_oracle_response(question):
+# Генерация ответа
+async def generate_response(user_message, mode):
+    prompt = config["characters"][mode]["description"]
     try:
-        response = openai.ChatCompletion.create(
+        openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": config["characters"]["oracle"]["description"]},
-                      {"role": "user", "content": question}]
-        )["choices"][0]["message"]["content"].strip()
-        return response
+            messages=[{"role": "system", "content": prompt},
+                      {"role": "user", "content": user_message}]
+        )
+        return openai_response["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logger.error(f"Ошибка OpenAI: {e}")
-        return config["messages"]["oracle_error"]
+        return "Произошла ошибка. Попробуйте позже."
 
-# Обработка входящих сообщений
+# Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text.strip()
     user_id = update.message.from_user.id
+    user_message = update.message.text.strip().lower()
 
-    # Определяем текущий режим
+    user_data = database.get_user(user_id)
+    if not user_data:
+        database.add_user(user_id, update.message.from_user.username)
+        user_data = database.get_user(user_id)
+
+    free_answers = user_data[4]  # 4-й индекс — оставшиеся бесплатные ответы
+    premium = user_data[3]  # 3-й индекс — статус подписки
+
+    # Проверяем, есть ли бесплатные ответы
+    if not premium and free_answers <= 0:
+        await update.message.reply_text("У вас закончились бесплатные ответы! Оформите подписку: /buy_premium")
+        return
+
+    # Определяем режим
     mode = context.user_data.get("mode", "oracle")
-    
-    # Генерируем ответ
-    if mode == "magic_ball":
-        response = await generate_magic_ball_response(user_message, user_id, context)
-    else:
-        response = await generate_oracle_response(user_message)
-
+    response = await generate_response(user_message, mode)
     database.log_message(user_id, user_message, response, mode)
+    
+    if not premium:
+        database.decrease_free_answers(user_id)
+    
     await update.message.reply_text(response)
 
 # Настройка команд
 async def set_commands(application):
-    try:
-        commands = [
-            BotCommand("start", "Начать работу"),
-            BotCommand("oracle", "Переключиться в режим Оракула"),
-            BotCommand("magicball", "Переключиться в режим Магического шара")
-        ]
-        await application.bot.set_my_commands(commands)
-        logging.info("Команды успешно установлены.")
-    except Exception as e:
-        logging.error(f"Ошибка при установке команд: {e}")
+    commands = [
+        BotCommand("start", "Начать"),
+        BotCommand("oracle", "Режим Оракула"),
+        BotCommand("magicball", "Режим Магического шара"),
+        BotCommand("buy_premium", "Оформить подписку")
+    ]
+    await application.bot.set_my_commands(commands)
 
-# Основной запуск бота
+# Запуск бота
 def main():
-    logger.info("Запуск бота...")
     application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
-    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
+    application.add_handler(CommandHandler("buy_premium", buy_premium))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    try:
-        application.run_polling()
-    except Exception as e:
-        logger.error(f"Ошибка в основном цикле бота: {e}")
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
