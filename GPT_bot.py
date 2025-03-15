@@ -1,4 +1,34 @@
-import json
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_message = update.message.text.lower()
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username
+
+    # Проверяем, есть ли у пользователя уже разблокированные души
+    unlocked_souls = database.get_user_souls(user_id)
+
+    # Проверяем, находится ли бот в режиме выбора души
+    if context.user_data.get("mode") == "soul_selection":
+        if user_message in config["characters"]:
+            if user_message not in unlocked_souls:
+                if database.unlock_soul(user_id, user_message):
+                    unlocked_souls.append(user_message)
+                    context.user_data["mode"] = user_message
+                    await update.message.reply_text(f"Ты разблокировал душу: {config['characters'][user_message]['name']}!\nТеперь ты говоришь с ней!")
+                else:
+                    await update.message.reply_text("Не удалось разблокировать душу.")
+                return
+
+            # Если душа уже разблокирована, переключаемся на неё
+            context.user_data["mode"] = user_message
+            await update.message.reply_text(f"Теперь ты говоришь с {config['characters'][user_message]['name']}!")
+        else:
+            await update.message.reply_text("Такой души нет. Пожалуйста, выбери существующую душу.")
+        return
+
+    # Если сообщение не является названием души, обрабатываем его как обычный вопрос
+    mode = context.user_data.get("mode", "oracle")  # По умолчанию — Оракул
+    if mode == "magic_ball":
+        response = await generate_magic_ball_response(user_message,import json
 from datetime import datetime
 from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
