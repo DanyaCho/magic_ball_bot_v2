@@ -1,5 +1,5 @@
-import json
 import os
+import json
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -12,13 +12,13 @@ from telegram.ext import (
 )
 import database
 
-# Получение токена из переменной окружения
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-if not TOKEN:
-    raise ValueError("Необходимо установить переменную окружения TELEGRAM_BOT_TOKEN")
+# Считываем токен из переменной окружения BOT_TOKEN
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("Необходимо установить переменную окружения BOT_TOKEN на Render")
 
-# Создание приложения с использованием полученного токена
-app = ApplicationBuilder().token(TOKEN).build()
+# Создаём приложение с использованием полученного токена
+app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 # Загружаем конфигурацию из файла config.json (переименуйте, если нужно)
 with open("config.json", "r", encoding="utf-8") as f:
