@@ -3,7 +3,8 @@
     {"command": "start", "description": "Запустить бота"},
     {"command": "oracle", "description": "Режим Оракула"},
     {"command": "magicball", "description": "Режим Магического шара"},
-    {"command": "soul", "description": "Выбрать душу (персонажа)"}
+    {"command": "soul", "description": "Выбрать душу (персонажа)"},
+    {"command": "subscribe", "description": "Оформить подписку"}
   ],
   "messages": {
     "start": "Привет! Выберите режим: Оракул или Магический шар.",
