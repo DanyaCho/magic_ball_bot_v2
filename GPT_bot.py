@@ -1,10 +1,17 @@
 import json
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters
+)
 import database
 
-# Загружаем конфигурацию из файла config (1).json
+# Загружаем конфигурацию из файла config.json (переименуйте, если нужно)
 with open("config.json", "r", encoding="utf-8") as f:
     config = json.load(f)
 
@@ -38,7 +45,7 @@ def check_and_reset_limits(user: dict) -> None:
             user["free_answers_left"] = FREE_QUESTIONS_PER_PERIOD
             user["free_reset_at"] = now + timedelta(days=FREE_PERIOD_DAYS)
 
-def handle_oracle(update: Update, context: CallbackContext):
+async def handle_oracle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Обработчик режима Оракула с проверкой лимитов.
     Если лимит бесплатного режима исчерпан, предлагает оформить подписку.
@@ -72,12 +79,12 @@ def handle_oracle(update: Update, context: CallbackContext):
             user["premium_answers_left"] -= 1
             database.update_user(user)
             answer = generate_oracle_answer(question)
-            update.message.reply_text(answer)
+            await update.message.reply_text(answer)
         else:
             time_left = user["premium_reset_at"] - now
             hours_left = time_left.seconds // 3600
             minutes_left = (time_left.seconds % 3600) // 60
-            update.message.reply_text(
+            await update.message.reply_text(
                 f"Лимит платных вопросов исчерпан. Следующее обновление через {hours_left} ч. {minutes_left} мин."
             )
     else:
@@ -85,18 +92,18 @@ def handle_oracle(update: Update, context: CallbackContext):
             user["free_answers_left"] -= 1
             database.update_user(user)
             answer = generate_oracle_answer(question)
-            update.message.reply_text(answer)
+            await update.message.reply_text(answer)
         else:
             keyboard = [
                 [InlineKeyboardButton("Оформить подписку", callback_data="subscribe")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            update.message.reply_text(
+            await update.message.reply_text(
                 "Вы исчерпали бесплатный лимит (5 вопросов на 30 дней). Оформите подписку для получения 20 вопросов в сутки.",
                 reply_markup=reply_markup
             )
 
-def subscribe_callback(update: Update, context: CallbackContext):
+async def subscribe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Обработчик нажатия кнопки для оформления подписки.
     Здесь можно интегрировать платёжную систему; в данном примере подписка активируется сразу.
@@ -110,23 +117,22 @@ def subscribe_callback(update: Update, context: CallbackContext):
     user["premium_answers_left"] = PREMIUM_QUESTIONS_PER_DAY
     user["premium_reset_at"] = now + timedelta(hours=PREMIUM_PERIOD_HOURS)
     database.update_user(user)
-    query.answer("Подписка оформлена!")
-    query.edit_message_text("Подписка успешно оформена! Теперь у вас 20 вопросов в сутки для режима Оракула.")
+    await query.answer("Подписка оформлена!")
+    await query.edit_message_text("Подписка успешно оформлена! Теперь у вас 20 вопросов в сутки для режима Оракула.")
 
-def start_command(update: Update, context: CallbackContext):
-    update.message.reply_text(config["messages"]["start"])
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(config["messages"]["start"])
 
 def main():
     app = ApplicationBuilder().token("YOUR_TELEGRAM_BOT_TOKEN").build()
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("oracle", handle_oracle))
-    # Если у вас уже есть хендлер для режима Магического шара, его не трогаем
+    # Если у вас есть режим Магического шара, оставляем его без изменений:
     # app.add_handler(CommandHandler("magicball", handle_magicball))
     app.add_handler(CallbackQueryHandler(subscribe_callback, pattern="^subscribe$"))
-    # Если текстовые сообщения без команд обрабатываются как режим Магического шара,
-    # оставляем их, либо направляем в oracle
-    app.add_handler(MessageHandler(filters.text & ~filters.command, handle_oracle))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_oracle))
+    
     app.run_polling()
 
 if __name__ == "__main__":
