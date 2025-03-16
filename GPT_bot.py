@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 import database
 
 # Загружаем конфигурацию из файла config (1).json
@@ -117,19 +117,17 @@ def start_command(update: Update, context: CallbackContext):
     update.message.reply_text(config["messages"]["start"])
 
 def main():
-    updater = Updater("YOUR_TELEGRAM_BOT_TOKEN")
-    dp = updater.dispatcher
+    app = ApplicationBuilder().token("YOUR_TELEGRAM_BOT_TOKEN").build()
 
-    dp.add_handler(CommandHandler("start", start_command))
-    dp.add_handler(CommandHandler("oracle", handle_oracle))
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("oracle", handle_oracle))
     # Если у вас уже есть хендлер для режима Магического шара, его не трогаем
-    # dp.add_handler(CommandHandler("magicball", handle_magicball))
-    dp.add_handler(CallbackQueryHandler(subscribe_callback, pattern="^subscribe$"))
+    # app.add_handler(CommandHandler("magicball", handle_magicball))
+    app.add_handler(CallbackQueryHandler(subscribe_callback, pattern="^subscribe$"))
     # Если текстовые сообщения без команд обрабатываются как режим Магического шара,
     # оставляем их, либо направляем в oracle
-    dp.add_handler(MessageHandler(filters.text & ~filters.command, handle_oracle))
-    updater.start_polling()
-    updater.idle()
+    app.add_handler(MessageHandler(filters.text & ~filters.command, handle_oracle))
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
