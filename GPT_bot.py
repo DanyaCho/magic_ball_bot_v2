@@ -117,7 +117,7 @@ def start_command(update: Update, context: CallbackContext):
     update.message.reply_text(config["messages"]["start"])
 
 def main():
-    updater = Updater("YOUR_TELEGRAM_BOT_TOKEN", use_context=True)
+    updater = Updater("YOUR_TELEGRAM_BOT_TOKEN")
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start_command))
