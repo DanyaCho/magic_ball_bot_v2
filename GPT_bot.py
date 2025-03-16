@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext, filters
 import database
 
 # Загружаем конфигурацию из файла config (1).json
@@ -127,7 +127,7 @@ def main():
     dp.add_handler(CallbackQueryHandler(subscribe_callback, pattern="^subscribe$"))
     # Если текстовые сообщения без команд обрабатываются как режим Магического шара,
     # оставляем их, либо направляем в oracle
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_oracle))
+    dp.add_handler(MessageHandler(filters.text & ~filters.command, handle_oracle))
     updater.start_polling()
     updater.idle()
 
