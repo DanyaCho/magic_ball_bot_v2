@@ -1,8 +1,8 @@
 import random
 import json
 from datetime import datetime
-from telegram import Update, BotCommand
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 import openai
 from dotenv import load_dotenv
 import os
@@ -56,16 +56,51 @@ async def generate_magic_ball_response(question, telegram_id, context):
 
 # Генерация ответа для Оракула
 async def generate_oracle_response(question):
+    soul_name = context.user_data.get("soul", "oracle")
+    soul_description = config["characters"][soul_name]["description"]
+    
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": config["characters"]["oracle"]["description"]},
+            messages=[{"role": "system", "content": soul_description},
                       {"role": "user", "content": question}]
         )["choices"][0]["message"]["content"].strip()
         return response
     except Exception as e:
         logger.error(f"Ошибка OpenAI: {e}")
         return config["messages"]["oracle_error"]
+
+# Команда /premium
+async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    user = database.get_user(user_id)
+    if not user:
+        database.add_user(user_id, update.message.from_user.username or "unknown")
+        user = database.get_user(user_id)
+
+    if user["premium"] and user["premium_expires_at"] and user["premium_expires_at"] > datetime.utcnow().date():
+        await update.message.reply_text("У вас уже есть премиум-подписка!")
+        return
+
+    # Кнопка покупки
+    keyboard = [
+        [InlineKeyboardButton("Купить Премиум (30 дней)", callback_data="buy_premium")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "Премиум-подписка даёт 20 ответов Оракула в день на 30 дней!\nБесплатный лимит: 10 ответов в месяц.",
+        reply_markup=reply_markup
+    )
+
+# Обработка callback для покупки премиум
+async def handle_premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    if database.activate_premium(user_id):
+        await query.edit_message_text("Премиум-подписка активирована на 30 дней!")
+    else:
+        await query.edit_message_text("Ошибка активации. Попробуйте позже.")
 
 # Обработка входящих сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,7 +114,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if mode == "magic_ball":
         response = await generate_magic_ball_response(user_message, user_id, context)
     else:
-        response = await generate_oracle_response(user_message)
+        # Проверка лимитов для Оракула
+        can_respond, error_message = database.check_and_decrement_oracle_limit(user_id)
+        if not can_respond:
+            await update.message.reply_text(error_message)
+            return
+        response = await generate_oracle_response(user_message, context)
 
     database.log_message(user_id, user_message, response, mode)
     await update.message.reply_text(response)
@@ -90,7 +130,8 @@ async def set_commands(application):
         commands = [
             BotCommand("start", "Начать работу"),
             BotCommand("oracle", "Переключиться в режим Оракула"),
-            BotCommand("magicball", "Переключиться в режим Магического шара")
+            BotCommand("magicball", "Переключиться в режим Магического шара"),
+            BotCommand("premium", "Купить премиум-подписку")
         ]
         await application.bot.set_my_commands(commands)
         logging.info("Команды успешно установлены.")
@@ -105,6 +146,8 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("oracle", oracle))
     application.add_handler(CommandHandler("magicball", magicball))
+    application.add_handler(CommandHandler("premium", premium))
+    application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     try:
