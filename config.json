@@ -3,7 +3,7 @@
     {"command": "start", "description": "Запустить бота"},
     {"command": "oracle", "description": "Режим Оракула"},
     {"command": "magicball", "description": "Режим Магического шара"},
-    {"command": "soul", "description": "Выбрать душу (персонажа)"}
+    {"command": "premium", "description": "Купить премиум-подписку"}
   ],
   "messages": {
     "start": "Привет! Выберите режим: Оракул или Магический шар.",
@@ -13,7 +13,9 @@
     "hidden_mode_activated": "Скрытый режим активирован.",
     "hidden_mode_deactivated": "Скрытый режим деактивирован.",
     "unknown_mode": "Режим не распознан.",
-    "soul_changed": "Теперь ты говоришь с {soul_name}!"
+    "soul_changed": "Теперь ты говоришь с {soul_name}!",
+    "limit_exceeded_free": "Лимит ответов Оракула (10 в месяц) исчерпан. Купи премиум!",
+    "limit_exceeded_premium": "Дневной лимит ответов Оракула (20 в день) исчерпан."
   },
   "characters": {
     "oracle": {
