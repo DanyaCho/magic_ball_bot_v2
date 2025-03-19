@@ -172,11 +172,17 @@ async def run_bot():
     application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Запускаем polling без управления циклом событий
+    # Инициализируем и запускаем application
     await application.initialize()
     await application.start()
+    
+    # Запускаем polling как задачу
+    polling_task = asyncio.create_task(application.run_polling(allowed_updates=Update.ALL_TYPES))
+    
     try:
-        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+        await polling_task
+    except asyncio.CancelledError:
+        logger.info("Polling task was cancelled.")
     finally:
         await application.stop()
         await application.shutdown()
@@ -184,19 +190,24 @@ async def run_bot():
 # Функция для запуска в среде с уже запущенным циклом событий
 def main():
     loop = asyncio.get_event_loop()
-    try:
-        # Если цикл уже запущен (например, в Render), просто создаём задачу
-        if loop.is_running():
-            task = loop.create_task(run_bot())
-            return task  # Возвращаем задачу, чтобы среда могла её обработать
-        else:
-            # Если цикла нет, запускаем его
+    # Если цикл уже запущен (например, в Render), создаём задачу и возвращаем её
+    if loop.is_running():
+        logger.info("Цикл событий уже запущен, создаём задачу для бота...")
+        task = asyncio.create_task(run_bot())
+        return task  # Возвращаем задачу, чтобы среда могла её обработать
+    else:
+        # Если цикла нет, запускаем его
+        logger.info("Запускаем новый цикл событий...")
+        try:
             loop.run_until_complete(run_bot())
-    except KeyboardInterrupt:
-        logger.info("Бот остановлен пользователем.")
-    except Exception as e:
-        logger.error(f"Ошибка в основном цикле бота: {e}")
-        raise
+        except KeyboardInterrupt:
+            logger.info("Бот остановлен пользователем.")
+        except Exception as e:
+            logger.error(f"Ошибка в основном цикле бота: {e}")
+            raise
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
 
 if __name__ == "__main__":
     main()
