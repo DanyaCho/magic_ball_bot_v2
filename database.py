@@ -136,6 +136,28 @@ def log_message(telegram_id, message_text, response_text, mode):
     finally:
         conn.close()
 
+# Функция для записи платежей в лог
+def log_payment(telegram_id, amount, currency, charge_id):
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO payment_logs (telegram_id, amount, currency, charge_id, created_at) 
+                    VALUES (%s, %s, %s, %s, %s);
+                    """,
+                    (telegram_id, amount, currency, charge_id, datetime.utcnow()),
+                )
+                logger.info(f"Лог платежа добавлен для пользователя {telegram_id}.")
+    except psycopg2.Error as e:
+        logger.error(f"Ошибка при сохранении платежа для {telegram_id}: {e}")
+    finally:
+        conn.close()
+
 # Проверка и обновление лимитов
 def reset_limits_if_needed(telegram_id):
     conn = get_db_connection()
