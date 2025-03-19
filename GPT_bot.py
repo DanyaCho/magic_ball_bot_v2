@@ -165,6 +165,7 @@ async def set_commands(application):
 async def main():
     logger.info("Запуск бота...")
     while True:
+        application = None
         try:
             application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
             
@@ -181,9 +182,15 @@ async def main():
             break  # Выходим из цикла, если всё работает
         except Conflict as e:
             logger.error(f"Конфликт подключения: {e}. Переподключение через 5 секунд...")
+            if application:
+                await application.stop()
+                await application.shutdown()
             await asyncio.sleep(5)
         except Exception as e:
             logger.error(f"Ошибка в основном цикле бота: {e}")
+            if application:
+                await application.stop()
+                await application.shutdown()
             await asyncio.sleep(5)
 
 if __name__ == "__main__":
