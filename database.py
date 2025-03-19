@@ -181,7 +181,7 @@ def reset_limits_if_needed(telegram_id):
         conn.close()
 
 # Проверка лимитов и уменьшение счетчиков
-def check_and_decrement_oracle_limit(telegram_id, config):
+def check_and_decrement_oracle_limit(telegram_id, username, config):
     conn = get_db_connection()
     if not conn:
         return False, "Ошибка базы данных."
@@ -197,7 +197,7 @@ def check_and_decrement_oracle_limit(telegram_id, config):
                 )
                 user = cur.fetchone()
                 if not user:
-                    add_user(telegram_id, "unknown")
+                    add_user(telegram_id, username or "unknown")
                     cur.execute(
                         "SELECT premium, oracle_monthly_answers_left, oracle_daily_answers_left, premium_expires_at "
                         "FROM users WHERE telegram_id = %s",
