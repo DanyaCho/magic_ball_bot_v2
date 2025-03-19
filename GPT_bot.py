@@ -8,18 +8,23 @@ from dotenv import load_dotenv
 import os
 import logging
 import database
-
-# Загрузка переменных окружения
-load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai.api_key = OPENAI_API_KEY
+import time
+from telegram.error import Conflict
 
 # Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Загрузка переменных окружения
+load_dotenv()
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not BOT_TOKEN or not OPENAI_API_KEY:
+    logger.error("Отсутствует BOT_TOKEN или OPENAI_API_KEY в переменных окружения.")
+    exit(1)
+openai.api_key = OPENAI_API_KEY
 
 # Загрузка конфигурации
 try:
@@ -119,7 +124,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = await generate_magic_ball_response(user_message, user_id, context)
     else:
         # Проверка лимитов для Оракула
-        can_respond, error_message = database.check_and_decrement_oracle_limit(user_id)
+        can_respond, error_message = database.check_and_decrement_oracle_limit(user_id, config)
         logger.info(f"Можно отвечать: {can_respond}, Сообщение об ошибке: {error_message}")
         if not can_respond:
             await update.message.reply_text(error_message)
@@ -139,26 +144,46 @@ async def set_commands(application):
             BotCommand("premium", "Купить премиум-подписку")
         ]
         await application.bot.set_my_commands(commands)
-        logging.info("Команды успешно установлены.")
+        logger.info("Команды успешно установлены.")
     except Exception as e:
-        logging.error(f"Ошибка при установке команд: {e}")
+        logger.error(f"Ошибка при установке команд: {e}")
 
 # Основной запуск бота
 def main():
-    logger.info("Запуск бота...")
-    application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
-    
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("oracle", oracle))
-    application.add_handler(CommandHandler("magicball", magicball))
-    application.add_handler(CommandHandler("premium", premium))
-    application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    try:
-        application.run_polling()
-    except Exception as e:
-        logger.error(f"Ошибка в основном цикле бота: {e}")
+    while True:
+        application = None
+        try:
+            logger.info("Запуск бота...")
+            application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
+            
+            application.add_handler(CommandHandler("start", start))
+            application.add_handler(CommandHandler("oracle", oracle))
+            application.add_handler(CommandHandler("magicball", magicball))
+            application.add_handler(CommandHandler("premium", premium))
+            application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+            
+            logger.info("Начинаем polling...")
+            application.run_polling(allowed_updates=Update.ALL_TYPES)
+        except Conflict as e:
+            logger.error(f"Конфликт: {e}. Перезапуск через 5 секунд...")
+            if application:
+                logger.info("Останавливаем Application...")
+                application.stop()
+                application.shutdown()
+            time.sleep(5)  # Ждём 5 секунд перед перезапуском
+        except Exception as e:
+            logger.error(f"Ошибка в основном цикле бота: {e}")
+            if application:
+                logger.info("Останавливаем Application...")
+                application.stop()
+                application.shutdown()
+            break
+        finally:
+            if application:
+                logger.info("Завершаем Application...")
+                application.stop()
+                application.shutdown()
 
 if __name__ == "__main__":
     main()
