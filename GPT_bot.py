@@ -7,16 +7,12 @@ import openai
 from dotenv import load_dotenv
 import os
 import logging
-from openai.error import RateLimitError, AuthenticationError
-import asyncio
+import database
 
 # Загрузка переменных окружения
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not BOT_TOKEN or not OPENAI_API_KEY:
-    logger.error("Отсутствует BOT_TOKEN или OPENAI_API_KEY в переменных окружения.")
-    exit(1)
 openai.api_key = OPENAI_API_KEY
 
 # Настройка логирования
@@ -33,27 +29,6 @@ try:
 except (FileNotFoundError, json.JSONDecodeError) as e:
     logger.error(f"Ошибка при загрузке config.json: {e}")
     exit(1)
-
-# Заглушка для database (замени на свою реализацию)
-class Database:
-    def get_user(self, user_id):
-        # Возвращаем тестового пользователя
-        return {"premium": False, "premium_expires_at": None}
-
-    def add_user(self, user_id, username):
-        pass
-
-    def check_and_decrement_oracle_limit(self, user_id):
-        # Для теста всегда разрешаем отвечать
-        return True, ""
-
-    def activate_premium(self, user_id):
-        return True
-
-    def log_message(self, user_id, user_message, response, mode):
-        pass
-
-database = Database()
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -80,10 +55,9 @@ async def generate_magic_ball_response(question, telegram_id, context):
     return response
 
 # Генерация ответа для Оракула
-async def generate_oracle_response(question, context):
+async def generate_oracle_response(question):
     soul_name = context.user_data.get("soul", "oracle")
     soul_description = config["characters"][soul_name]["description"]
-    logger.info(f"Выбранная душа: {soul_name}")
     
     try:
         response = openai.ChatCompletion.create(
@@ -92,12 +66,6 @@ async def generate_oracle_response(question, context):
                       {"role": "user", "content": question}]
         )["choices"][0]["message"]["content"].strip()
         return response
-    except RateLimitError:
-        logger.error("Превышен лимит запросов к OpenAI.")
-        return "Превышен лимит запросов. Попробуй позже."
-    except AuthenticationError:
-        logger.error("Неверный ключ OpenAI.")
-        return "Ошибка авторизации. Обратитесь к администратору."
     except Exception as e:
         logger.error(f"Ошибка OpenAI: {e}")
         return config["messages"]["oracle_error"]
@@ -114,6 +82,7 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("У вас уже есть премиум-подписка!")
         return
 
+    # Кнопка покупки
     keyboard = [
         [InlineKeyboardButton("Купить Премиум (30 дней)", callback_data="buy_premium")]
     ]
@@ -137,17 +106,6 @@ async def handle_premium_callback(update: Update, context: ContextTypes.DEFAULT_
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.strip()
     user_id = update.message.from_user.id
-    logger.info(f"Текущий режим: {context.user_data.get('mode', 'oracle')}, Сообщение: {user_message}")
-
-    # Обработка скрытого режима
-    if user_message.lower() == config["hidden_mode_trigger"]:
-        context.user_data["mode"] = "hidden"
-        await update.message.reply_text(config["messages"]["hidden_mode_activated"])
-        return
-    elif context.user_data.get("mode") == "hidden":
-        response = random.choice(config["hidden_mode_responses"])
-        await update.message.reply_text(response)
-        return
 
     # Определяем текущий режим
     mode = context.user_data.get("mode", "oracle")
@@ -158,7 +116,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         # Проверка лимитов для Оракула
         can_respond, error_message = database.check_and_decrement_oracle_limit(user_id)
-        logger.info(f"Можно отвечать: {can_respond}, Сообщение об ошибке: {error_message}")
         if not can_respond:
             await update.message.reply_text(error_message)
             return
@@ -182,7 +139,7 @@ async def set_commands(application):
         logging.error(f"Ошибка при установке команд: {e}")
 
 # Основной запуск бота
-async def main():
+def main():
     logger.info("Запуск бота...")
     application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
     
@@ -193,9 +150,10 @@ async def main():
     application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    await application.initialize()
-    await application.start()
-    await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        application.run_polling()
+    except Exception as e:
+        logger.error(f"Ошибка в основном цикле бота: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
