@@ -52,6 +52,11 @@ async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(config["messages"]["magic_ball_mode"])
     logger.info(f"Пользователь {update.message.from_user.id} переключился в режим Магического шара")
 
+# Команда /paysupport
+async def paysupport(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Пожалуйста, напишите причину запроса на возврат. Мы рассмотрим ваш запрос в ближайшее время.")
+    logger.info(f"Пользователь {update.message.from_user.id} запросил поддержку по платежам.")
+
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, telegram_id, context):
     chosen_tone = random.choice(["negative", "positive", "neutral"])
@@ -110,6 +115,7 @@ async def pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Проверяем payload
     if query.invoice_payload != "premium_subscription_30_days":
         await query.answer(ok=False, error_message="Неверный payload.")
+        logger.error(f"Ошибка предпроверки для пользователя {query.from_user.id}: Неверный payload")
         return
     # Подтверждаем предпроверку
     await query.answer(ok=True)
@@ -117,8 +123,11 @@ async def pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # Обработка успешного платежа
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.successful_payment.user.id
-    payment = update.message.successful_payment
-    logger.info(f"Успешный платёж от пользователя {user_id}: {payment.total_amount} {payment.currency}")
+    payment = update.message.from_user.successful_payment
+    logger.info(f"Успешный платёж: user_id={user_id}, amount={payment.total_amount}, currency={payment.currency}, charge_id={payment.telegram_payment_charge_id}")
+
+    # Сохраняем информацию о платеже в базе данных
+    database.log_payment(user_id, payment.total_amount, payment.currency, payment.telegram_payment_charge_id)
 
     # Активируем премиум-подписку
     if database.activate_premium(user_id):
@@ -168,7 +177,8 @@ async def set_commands(application):
             BotCommand("start", "Начать работу"),
             BotCommand("oracle", "Переключиться в режим Оракула"),
             BotCommand("magicball", "Переключиться в режим Магического шара"),
-            BotCommand("premium", "Купить премиум-подписку")
+            BotCommand("premium", "Купить премиум-подписку"),
+            BotCommand("paysupport", "Запросить возврат платежа")
         ]
         await application.bot.set_my_commands(commands)
         logger.info("Команды успешно установлены.")
@@ -187,6 +197,7 @@ def main():
             application.add_handler(CommandHandler("oracle", oracle))
             application.add_handler(CommandHandler("magicball", magicball))
             application.add_handler(CommandHandler("premium", premium))
+            application.add_handler(CommandHandler("paysupport", paysupport))
             application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
             application.add_handler(PreCheckoutQueryHandler(pre_checkout_query))
             application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
