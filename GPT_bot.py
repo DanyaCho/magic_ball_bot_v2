@@ -9,7 +9,6 @@ import os
 import logging
 from openai.error import RateLimitError, AuthenticationError
 import asyncio
-from telegram.error import Conflict
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -182,13 +181,27 @@ async def run_bot():
         await application.shutdown()
 
 def main():
-    try:
-        asyncio.run(run_bot())
-    except KeyboardInterrupt:
-        logger.info("Бот остановлен пользователем.")
-    except Exception as e:
-        logger.error(f"Ошибка в основном цикле бота: {e}")
-        raise  # Поднимаем исключение, чтобы внешний механизм (например, Render) мог перезапустить бота
+    # Используем текущий цикл событий, если он уже существует
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        # Если цикл уже запущен (например, в Render), создаём задачу
+        task = loop.create_task(run_bot())
+        # Ждём завершения задачи
+        try:
+            loop.run_until_complete(task)
+        except KeyboardInterrupt:
+            logger.info("Бот остановлен пользователем.")
+            task.cancel()
+            loop.run_until_complete(loop.shutdown_asyncgens())
+    else:
+        # Если цикла нет, запускаем его
+        try:
+            loop.run_until_complete(run_bot())
+        except KeyboardInterrupt:
+            logger.info("Бот остановлен пользователем.")
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
 
 if __name__ == "__main__":
     main()
