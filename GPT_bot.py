@@ -1,8 +1,8 @@
 import random
 import json
 from datetime import datetime
-from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, PreCheckoutQueryHandler
 import openai
 from dotenv import load_dotenv
 import os
@@ -90,17 +90,43 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("У вас уже есть премиум-подписка!")
         return
 
-    # Кнопка покупки
-    keyboard = [
-        [InlineKeyboardButton("Купить Премиум (30 дней)", callback_data="buy_premium")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(
-        "Премиум-подписка даёт 20 ответов Оракула в день на 30 дней!\nБесплатный лимит: 10 ответов в месяц.",
-        reply_markup=reply_markup
+    # Отправляем инвойс для оплаты премиум-подписки в Telegram Stars
+    await update.message.reply_invoice(
+        title=config["payment"]["premium_label"],
+        description=config["payment"]["premium_description"],
+        payload="premium_subscription_30_days",  # Уникальный идентификатор покупки
+        provider_token=config["payment"]["provider_token"],  # Пустой для XTR
+        currency=config["payment"]["currency"],  # XTR для Telegram Stars
+        prices=[LabeledPrice(config["payment"]["premium_label"], config["payment"]["premium_price"])],
+        need_email=False,
+        need_phone_number=False,
+        need_shipping_address=False,
+        is_flexible=False
     )
 
-# Обработка callback для покупки премиум
+# Обработка предпроверки платежа
+async def pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.pre_checkout_query
+    # Проверяем payload
+    if query.invoice_payload != "premium_subscription_30_days":
+        await query.answer(ok=False, error_message="Неверный payload.")
+        return
+    # Подтверждаем предпроверку
+    await query.answer(ok=True)
+
+# Обработка успешного платежа
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.successful_payment.user.id
+    payment = update.message.successful_payment
+    logger.info(f"Успешный платёж от пользователя {user_id}: {payment.total_amount} {payment.currency}")
+
+    # Активируем премиум-подписку
+    if database.activate_premium(user_id):
+        await update.message.reply_text(config["messages"]["premium_success"])
+    else:
+        await update.message.reply_text("Ошибка активации премиум-подписки. Попробуйте позже.")
+
+# Обработка callback для покупки премиум (оставляем для совместимости)
 async def handle_premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -162,6 +188,8 @@ def main():
             application.add_handler(CommandHandler("magicball", magicball))
             application.add_handler(CommandHandler("premium", premium))
             application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
+            application.add_handler(PreCheckoutQueryHandler(pre_checkout_query))
+            application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
             
             logger.info("Начинаем polling...")
