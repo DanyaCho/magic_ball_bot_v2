@@ -34,6 +34,27 @@ except (FileNotFoundError, json.JSONDecodeError) as e:
     logger.error(f"Ошибка при загрузке config.json: {e}")
     exit(1)
 
+# Заглушка для database (замени на свою реализацию)
+class Database:
+    def get_user(self, user_id):
+        # Возвращаем тестового пользователя
+        return {"premium": False, "premium_expires_at": None}
+
+    def add_user(self, user_id, username):
+        pass
+
+    def check_and_decrement_oracle_limit(self, user_id):
+        # Для теста всегда разрешаем отвечать
+        return True, ""
+
+    def activate_premium(self, user_id):
+        return True
+
+    def log_message(self, user_id, user_message, response, mode):
+        pass
+
+database = Database()
+
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(config["messages"]["start"])
@@ -161,7 +182,7 @@ async def set_commands(application):
         logging.error(f"Ошибка при установке команд: {e}")
 
 # Основной запуск бота
-async def run_bot():
+async def main():
     logger.info("Запуск бота...")
     application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
     
@@ -172,42 +193,9 @@ async def run_bot():
     application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Инициализируем и запускаем application
     await application.initialize()
     await application.start()
-    
-    # Запускаем polling как задачу
-    polling_task = asyncio.create_task(application.run_polling(allowed_updates=Update.ALL_TYPES))
-    
-    try:
-        await polling_task
-    except asyncio.CancelledError:
-        logger.info("Polling task was cancelled.")
-    finally:
-        await application.stop()
-        await application.shutdown()
-
-# Функция для запуска в среде с уже запущенным циклом событий
-def main():
-    loop = asyncio.get_event_loop()
-    # Если цикл уже запущен (например, в Render), создаём задачу и возвращаем её
-    if loop.is_running():
-        logger.info("Цикл событий уже запущен, создаём задачу для бота...")
-        task = asyncio.create_task(run_bot())
-        return task  # Возвращаем задачу, чтобы среда могла её обработать
-    else:
-        # Если цикла нет, запускаем его
-        logger.info("Запускаем новый цикл событий...")
-        try:
-            loop.run_until_complete(run_bot())
-        except KeyboardInterrupt:
-            logger.info("Бот остановлен пользователем.")
-        except Exception as e:
-            logger.error(f"Ошибка в основном цикле бота: {e}")
-            raise
-        finally:
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
+    await application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
