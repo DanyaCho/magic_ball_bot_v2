@@ -7,12 +7,15 @@ import openai
 from dotenv import load_dotenv
 import os
 import logging
-import database
+from openai.error import RateLimitError, AuthenticationError
 
 # Загрузка переменных окружения
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not BOT_TOKEN or not OPENAI_API_KEY:
+    logger.error("Отсутствует BOT_TOKEN или OPENAI_API_KEY в переменных окружения.")
+    exit(1)
 openai.api_key = OPENAI_API_KEY
 
 # Настройка логирования
@@ -55,9 +58,10 @@ async def generate_magic_ball_response(question, telegram_id, context):
     return response
 
 # Генерация ответа для Оракула
-async def generate_oracle_response(question):
+async def generate_oracle_response(question, context):
     soul_name = context.user_data.get("soul", "oracle")
     soul_description = config["characters"][soul_name]["description"]
+    logger.info(f"Выбранная душа: {soul_name}")
     
     try:
         response = openai.ChatCompletion.create(
@@ -66,6 +70,12 @@ async def generate_oracle_response(question):
                       {"role": "user", "content": question}]
         )["choices"][0]["message"]["content"].strip()
         return response
+    except RateLimitError:
+        logger.error("Превышен лимит запросов к OpenAI.")
+        return "Превышен лимит запросов. Попробуй позже."
+    except AuthenticationError:
+        logger.error("Неверный ключ OpenAI.")
+        return "Ошибка авторизации. Обратитесь к администратору."
     except Exception as e:
         logger.error(f"Ошибка OpenAI: {e}")
         return config["messages"]["oracle_error"]
@@ -82,7 +92,6 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("У вас уже есть премиум-подписка!")
         return
 
-    # Кнопка покупки
     keyboard = [
         [InlineKeyboardButton("Купить Премиум (30 дней)", callback_data="buy_premium")]
     ]
@@ -106,6 +115,17 @@ async def handle_premium_callback(update: Update, context: ContextTypes.DEFAULT_
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.strip()
     user_id = update.message.from_user.id
+    logger.info(f"Текущий режим: {context.user_data.get('mode', 'oracle')}, Сообщение: {user_message}")
+
+    # Обработка скрытого режима
+    if user_message.lower() == config["hidden_mode_trigger"]:
+        context.user_data["mode"] = "hidden"
+        await update.message.reply_text(config["messages"]["hidden_mode_activated"])
+        return
+    elif context.user_data.get("mode") == "hidden":
+        response = random.choice(config["hidden_mode_responses"])
+        await update.message.reply_text(response)
+        return
 
     # Определяем текущий режим
     mode = context.user_data.get("mode", "oracle")
@@ -116,6 +136,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         # Проверка лимитов для Оракула
         can_respond, error_message = database.check_and_decrement_oracle_limit(user_id)
+        logger.info(f"Можно отвечать: {can_respond}, Сообщение об ошибке: {error_message}")
         if not can_respond:
             await update.message.reply_text(error_message)
             return
@@ -139,21 +160,27 @@ async def set_commands(application):
         logging.error(f"Ошибка при установке команд: {e}")
 
 # Основной запуск бота
-def main():
+async def main():
     logger.info("Запуск бота...")
-    application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
-    
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("oracle", oracle))
-    application.add_handler(CommandHandler("magicball", magicball))
-    application.add_handler(CommandHandler("premium", premium))
-    application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    try:
-        application.run_polling()
-    except Exception as e:
-        logger.error(f"Ошибка в основном цикле бота: {e}")
+    while True:
+        try:
+            application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
+            
+            application.add_handler(CommandHandler("start", start))
+            application.add_handler(CommandHandler("oracle", oracle))
+            application.add_handler(CommandHandler("magicball", magicball))
+            application.add_handler(CommandHandler("premium", premium))
+            application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+            
+            await application.initialize()
+            await application.start()
+            await application.updater.start_polling()
+            await application.updater.idle()
+        except Exception as e:
+            logger.error(f"Ошибка в основном цикле бота: {e}")
+            await asyncio.sleep(5)
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
