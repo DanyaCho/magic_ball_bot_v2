@@ -164,62 +164,31 @@ async def set_commands(application):
 # Основной запуск бота
 async def run_bot():
     logger.info("Запуск бота...")
-    application = None
-    is_running = False
-    while True:
-        try:
-            application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
-            
-            application.add_handler(CommandHandler("start", start))
-            application.add_handler(CommandHandler("oracle", oracle))
-            application.add_handler(CommandHandler("magicball", magicball))
-            application.add_handler(CommandHandler("premium", premium))
-            application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
-            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-            
-            await application.initialize()
-            await application.start()
-            is_running = True
-            await application.run_polling(allowed_updates=Update.ALL_TYPES)
-            break  # Выходим из цикла, если всё работает
-        except Conflict as e:
-            logger.error(f"Конфликт подключения: {e}. Переподключение через 5 секунд...")
-            if application and is_running:
-                await application.stop()
-                await application.shutdown()
-                is_running = False
-            await asyncio.sleep(5)
-        except Exception as e:
-            logger.error(f"Ошибка в основном цикле бота: {e}")
-            if application and is_running:
-                await application.stop()
-                await application.shutdown()
-                is_running = False
-            await asyncio.sleep(5)
-        finally:
-            if application and is_running:
-                try:
-                    await application.stop()
-                    await application.shutdown()
-                except Exception as e:
-                    logger.error(f"Ошибка при завершении application: {e}")
+    application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
+    
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("oracle", oracle))
+    application.add_handler(CommandHandler("magicball", magicball))
+    application.add_handler(CommandHandler("premium", premium))
+    application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    try:
+        await application.initialize()
+        await application.start()
+        await application.run_polling(allowed_updates=Update.ALL_TYPES)
+    finally:
+        await application.stop()
+        await application.shutdown()
 
 def main():
-    # Создаём цикл событий вручную
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     try:
-        loop.run_until_complete(run_bot())
+        asyncio.run(run_bot())
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")
-    finally:
-        # Убедимся, что все задачи завершены
-        pending = asyncio.all_tasks(loop=loop)
-        for task in pending:
-            task.cancel()
-        loop.stop()
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
+    except Exception as e:
+        logger.error(f"Ошибка в основном цикле бота: {e}")
+        raise  # Поднимаем исключение, чтобы внешний механизм (например, Render) мог перезапустить бота
 
 if __name__ == "__main__":
     main()
