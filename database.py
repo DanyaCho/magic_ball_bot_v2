@@ -181,7 +181,7 @@ def reset_limits_if_needed(telegram_id):
         conn.close()
 
 # Проверка лимитов и уменьшение счетчиков
-def check_and_decrement_oracle_limit(telegram_id):
+def check_and_decrement_oracle_limit(telegram_id, config):
     conn = get_db_connection()
     if not conn:
         return False, "Ошибка базы данных."
