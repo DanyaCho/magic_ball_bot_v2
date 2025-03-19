@@ -15,7 +15,8 @@
     "unknown_mode": "Режим не распознан.",
     "soul_changed": "Теперь ты говоришь с {soul_name}!",
     "limit_exceeded_free": "Лимит ответов Оракула (10 в месяц) исчерпан. Купи премиум!",
-    "limit_exceeded_premium": "Дневной лимит ответов Оракула (20 в день) исчерпан."
+    "limit_exceeded_premium": "Дневной лимит ответов Оракула (20 в день) исчерпан.",
+    "premium_success": "Спасибо за покупку премиум-подписки! Она активирована на 30 дней."
   },
   "characters": {
     "oracle": {
@@ -45,5 +46,12 @@
   "hidden_mode_trigger": "медитация",
   "hidden_mode_responses": [
     "похуй", "похуй", "да похуй", "тоже похуй", "вообще похую"
-  ]
+  ],
+  "payment": {
+    "provider_token": "",  // Оставляем пустым для Telegram Stars
+    "premium_price": 50,  // Цена в Telegram Stars (например, 50 звёзд)
+    "currency": "XTR",    // Валюта для Telegram Stars
+    "premium_label": "Премиум-подписка на 30 дней",
+    "premium_description": "Получите 20 ответов Оракула в день на 30 дней!"
+  }
 }
