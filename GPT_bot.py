@@ -162,7 +162,7 @@ async def set_commands(application):
         logging.error(f"Ошибка при установке команд: {e}")
 
 # Основной запуск бота
-async def main():
+async def run_bot():
     logger.info("Запуск бота...")
     while True:
         application = None
@@ -192,6 +192,27 @@ async def main():
                 await application.stop()
                 await application.shutdown()
             await asyncio.sleep(5)
+        finally:
+            if application:
+                await application.stop()
+                await application.shutdown()
+
+def main():
+    # Создаём цикл событий вручную
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(run_bot())
+    except KeyboardInterrupt:
+        logger.info("Бот остановлен пользователем.")
+    finally:
+        # Убедимся, что все задачи завершены
+        pending = asyncio.all_tasks(loop=loop)
+        for task in pending:
+            task.cancel()
+        loop.stop()
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
