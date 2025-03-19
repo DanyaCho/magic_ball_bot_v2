@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 import os
 import logging
 from openai.error import RateLimitError, AuthenticationError
+import asyncio
+from telegram.error import Conflict
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -175,12 +177,14 @@ async def main():
             
             await application.initialize()
             await application.start()
-            await application.updater.start_polling()
-            await application.updater.idle()
+            await application.run_polling(allowed_updates=Update.ALL_TYPES)
+            break  # Выходим из цикла, если всё работает
+        except Conflict as e:
+            logger.error(f"Конфликт подключения: {e}. Переподключение через 5 секунд...")
+            await asyncio.sleep(5)
         except Exception as e:
             logger.error(f"Ошибка в основном цикле бота: {e}")
             await asyncio.sleep(5)
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
