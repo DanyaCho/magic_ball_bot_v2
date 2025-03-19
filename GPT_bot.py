@@ -114,6 +114,7 @@ async def handle_premium_callback(update: Update, context: ContextTypes.DEFAULT_
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.strip()
     user_id = update.message.from_user.id
+    username = update.message.from_user.username
     logger.info(f"Текущий режим: {context.user_data.get('mode', 'oracle')}, Сообщение: {user_message}")
 
     # Определяем текущий режим
@@ -124,7 +125,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = await generate_magic_ball_response(user_message, user_id, context)
     else:
         # Проверка лимитов для Оракула
-        can_respond, error_message = database.check_and_decrement_oracle_limit(user_id, config)
+        can_respond, error_message = database.check_and_decrement_oracle_limit(user_id, username, config)
         logger.info(f"Можно отвечать: {can_respond}, Сообщение об ошибке: {error_message}")
         if not can_respond:
             await update.message.reply_text(error_message)
