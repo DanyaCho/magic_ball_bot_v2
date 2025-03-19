@@ -55,8 +55,10 @@ async def generate_magic_ball_response(question, telegram_id, context):
     return response
 
 # Генерация ответа для Оракула
-async def generate_oracle_response(question):
+async def generate_oracle_response(question, context):
+    logger.info("Генерация ответа Оракула...")
     soul_name = context.user_data.get("soul", "oracle")
+    logger.info(f"Выбранная душа: {soul_name}")
     soul_description = config["characters"][soul_name]["description"]
     
     try:
@@ -65,6 +67,7 @@ async def generate_oracle_response(question):
             messages=[{"role": "system", "content": soul_description},
                       {"role": "user", "content": question}]
         )["choices"][0]["message"]["content"].strip()
+        logger.info(f"Ответ от OpenAI: {response}")
         return response
     except Exception as e:
         logger.error(f"Ошибка OpenAI: {e}")
@@ -106,6 +109,7 @@ async def handle_premium_callback(update: Update, context: ContextTypes.DEFAULT_
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.strip()
     user_id = update.message.from_user.id
+    logger.info(f"Текущий режим: {context.user_data.get('mode', 'oracle')}, Сообщение: {user_message}")
 
     # Определяем текущий режим
     mode = context.user_data.get("mode", "oracle")
@@ -116,6 +120,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         # Проверка лимитов для Оракула
         can_respond, error_message = database.check_and_decrement_oracle_limit(user_id)
+        logger.info(f"Можно отвечать: {can_respond}, Сообщение об ошибке: {error_message}")
         if not can_respond:
             await update.message.reply_text(error_message)
             return
