@@ -57,6 +57,28 @@ async def paysupport(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Пожалуйста, напишите причину запроса на возврат. Мы рассмотрим ваш запрос в ближайшее время.")
     logger.info(f"Пользователь {update.message.from_user.id} запросил поддержку по платежам.")
 
+# Команда /checkstars (только для владельца бота)
+async def check_stars(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    # Проверяем, что это владелец бота (замени на свой Telegram ID)
+    if user_id != 5028281352:
+        await update.message.reply_text("Эта команда доступна только владельцу бота.")
+        return
+
+    try:
+        # Запрашиваем статус звёзд через Telegram API
+        stars_status = await context.bot.get_stars_status(peer={"_": "inputPeerSelf"})
+        balance = stars_status.balance
+        available_for_withdrawal = stars_status.available_for_withdrawal
+        await update.message.reply_text(
+            f"Текущий баланс звёзд: {balance} XTR\n"
+            f"Доступно для вывода: {available_for_withdrawal} XTR\n"
+            f"Для вывода нужно минимум 1000 XTR и 21 день ожидания."
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при получении баланса звёзд: {e}")
+        await update.message.reply_text("Не удалось проверить баланс звёзд.")
+
 # Генерация ответа для Магического Шара
 async def generate_magic_ball_response(question, telegram_id, context):
     chosen_tone = random.choice(["negative", "positive", "neutral"])
@@ -123,7 +145,6 @@ async def pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # Обработка успешного платежа
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Получаем user_id из from_user
         user_id = update.message.from_user.id
         payment = update.message.successful_payment
         logger.info(f"Успешный платёж: user_id={user_id}, amount={payment.total_amount}, currency={payment.currency}, charge_id={payment.telegram_payment_charge_id}")
@@ -183,12 +204,19 @@ async def set_commands(application):
             BotCommand("oracle", "Переключиться в режим Оракула"),
             BotCommand("magicball", "Переключиться в режим Магического шара"),
             BotCommand("premium", "Купить премиум-подписку"),
-            BotCommand("paysupport", "Запросить возврат платежа")
+            BotCommand("paysupport", "Запросить возврат платежа"),
+            BotCommand("checkstars", "Проверить баланс звёзд (для владельца)")
         ]
         await application.bot.set_my_commands(commands)
         logger.info("Команды успешно установлены.")
     except Exception as e:
         logger.error(f"Ошибка при установке команд: {e}")
+
+# Обработчик ошибок
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"Ошибка: {context.error}")
+    if update and update.message:
+        await update.message.reply_text("Произошла ошибка. Попробуйте позже.")
 
 # Основной запуск бота
 def main():
@@ -203,10 +231,12 @@ def main():
             application.add_handler(CommandHandler("magicball", magicball))
             application.add_handler(CommandHandler("premium", premium))
             application.add_handler(CommandHandler("paysupport", paysupport))
+            application.add_handler(CommandHandler("checkstars", check_stars))
             application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
             application.add_handler(PreCheckoutQueryHandler(pre_checkout_query))
             application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+            application.add_error_handler(error_handler)
             
             logger.info("Начинаем polling...")
             application.run_polling(allowed_updates=Update.ALL_TYPES)
