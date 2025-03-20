@@ -1,191 +1,69 @@
-import psycopg2
-from datetime import datetime, timedelta, date
-import logging
-import os
-from dotenv import load_dotenv
-
-# Настройка логирования
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-# Загрузка переменных окружения
-load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-def get_db_connection():
-    try:
-        conn = psycopg2.connect(DATABASE_URL)
-        logger.info("Подключение к БД установлено.")
-        return conn
-    except Exception as e:
-        logger.error(f"Ошибка подключения к БД: {e}")
-        raise
-
-def add_user(telegram_id, username):
-    conn = get_db_connection()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO users (telegram_id, username, premium, oracle_requests, last_oracle_request) "
-                    "VALUES (%s, %s, FALSE, 3, NULL) ON CONFLICT (telegram_id) DO NOTHING",
-                    (telegram_id, username)
-                )
-    except Exception as e:
-        logger.error(f"Ошибка при добавлении пользователя: {e}")
-    finally:
-        conn.close()
-
-def get_user(telegram_id):
-    conn = get_db_connection()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT telegram_id, username, premium, premium_expires_at, oracle_requests, last_oracle_request "
-                    "FROM users WHERE telegram_id = %s",
-                    (telegram_id,)
-                )
-                user = cur.fetchone()
-                if user:
-                    return {
-                        "telegram_id": user[0],
-                        "username": user[1],
-                        "premium": user[2],
-                        "premium_expires_at": user[3],
-                        "oracle_requests": user[4],
-                        "last_oracle_request": user[5]
-                    }
-                return None
-    except Exception as e:
-        logger.error(f"Ошибка при получении пользователя: {e}")
-        return None
-    finally:
-        conn.close()
-
-def activate_premium(telegram_id):
-    conn = get_db_connection()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                # Проверяем, есть ли пользователь
-                cur.execute("SELECT premium, premium_expires_at FROM users WHERE telegram_id = %s", (telegram_id,))
-                user = cur.fetchone()
-                if not user:
-                    logger.error(f"Пользователь {telegram_id} не найден при активации премиум-подписки.")
-                    return False
-
-                # Устанавливаем премиум на 30 дней (только дата)
-                new_expiry = (datetime.utcnow() + timedelta(days=30)).date()
-                if user[0] and user[1]:  # user[0] - premium, user[1] - premium_expires_at
-                    # Если подписка уже активна, добавляем 30 дней к текущей дате окончания
-                    current_expiry = user[1]
-                    if isinstance(current_expiry, datetime):
-                        current_expiry = current_expiry.date()
-                    if current_expiry > datetime.utcnow().date():
-                        new_expiry = (current_expiry + timedelta(days=30))
-                        logger.info(f"Подписка уже активна, продлеваем до {new_expiry}")
-                    else:
-                        logger.info(f"Подписка истекла, устанавливаем новую дату: {new_expiry}")
-                else:
-                    logger.info(f"Новая подписка, устанавливаем дату: {new_expiry}")
-
-                cur.execute(
-                    "UPDATE users SET premium = TRUE, premium_expires_at = %s WHERE telegram_id = %s",
-                    (new_expiry, telegram_id)
-                )
-                logger.info(f"Премиум-подписка активирована для {telegram_id} до {new_expiry}")
-                return True
-    except Exception as e:
-        logger.error(f"Ошибка при активации премиум-подписки: {e}")
-        return False
-    finally:
-        conn.close()
-
-def log_payment(telegram_id, amount, currency, charge_id):
-    conn = get_db_connection()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO payments (telegram_id, amount, currency, charge_id, payment_date) "
-                    "VALUES (%s, %s, %s, %s, %s)",
-                    (telegram_id, amount, currency, charge_id, datetime.utcnow())
-                )
-    except Exception as e:
-        logger.error(f"Ошибка при логировании платежа: {e}")
-    finally:
-        conn.close()
-
-def check_and_decrement_oracle_limit(telegram_id, username, config):
-    conn = get_db_connection()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT premium, premium_expires_at, oracle_requests, last_oracle_request "
-                    "FROM users WHERE telegram_id = %s",
-                    (telegram_id,)
-                )
-                user = cur.fetchone()
-                if not user:
-                    cur.execute(
-                        "INSERT INTO users (telegram_id, username, premium, oracle_requests, last_oracle_request) "
-                        "VALUES (%s, %s, FALSE, 3, NULL)",
-                        (telegram_id, username)
-                    )
-                    return True, None
-
-                premium, premium_expires_at, oracle_requests, last_oracle_request = user
-
-                # Проверяем премиум
-                current_date = datetime.utcnow().date()
-                if premium and premium_expires_at:
-                    expires_at_date = premium_expires_at.date() if isinstance(premium_expires_at, datetime) else premium_expires_at
-                    if expires_at_date < current_date:
-                        cur.execute(
-                            "UPDATE users SET premium = FALSE, premium_expires_at = NULL WHERE telegram_id = %s",
-                            (telegram_id,)
-                        )
-                        premium = False
-
-                if premium:
-                    return True, None
-
-                # Проверяем лимит запросов
-                if last_oracle_request:
-                    last_request_date = last_oracle_request.date() if isinstance(last_oracle_request, datetime) else last_oracle_request
-                    if last_request_date < current_date:
-                        oracle_requests = config["oracle"]["daily_limit"]
-
-                if oracle_requests <= 0:
-                    return False, config["messages"]["oracle_limit_exceeded"]
-
-                # Уменьшаем лимит и обновляем дату последнего запроса
-                cur.execute(
-                    "UPDATE users SET oracle_requests = %s, last_oracle_request = %s WHERE telegram_id = %s",
-                    (oracle_requests - 1, datetime.utcnow(), telegram_id)
-                )
-                return True, None
-    except Exception as e:
-        logger.error(f"Ошибка при проверке лимита Оракула: {e}")
-        return False, "Произошла ошибка. Попробуйте позже."
-    finally:
-        conn.close()
-
-def log_message(telegram_id, user_message, bot_response, mode):
-    conn = get_db_connection()
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO messages (telegram_id, user_message, bot_response, mode, timestamp) "
-                    "VALUES (%s, %s, %s, %s, %s)",
-                    (telegram_id, user_message, bot_response, mode, datetime.utcnow())
-                )
-    except Exception as e:
-        logger.error(f"Ошибка при логировании сообщения: {e}")
-    finally:
-        conn.close()
+{
+  "commands": [
+    {"command": "start", "description": "Запустить бота"},
+    {"command": "oracle", "description": "Режим Оракула"},
+    {"command": "trainer", "description": "Переключиться на Душу Тренера"},
+    {"command": "philosopher", "description": "Переключиться на Душу Философа"},
+    {"command": "hooligan", "description": "Переключиться на Душу Хулигана"},
+    {"command": "magicball", "description": "Режим Магического шара"},
+    {"command": "premium", "description": "Купить премиум-подписку"},
+    {"command": "paysupport", "description": "Запросить возврат платежа"},
+    {"command": "checkstars", "description": "Проверить баланс звёзд (для владельца)"}
+  ],
+  "messages": {
+    "start": "Привет! Выберите режим: Оракул или Магический шар.",
+    "oracle_mode": "Режим Оракула активирован. Задавайте вопросы.",
+    "trainer_mode": "Душа Тренера активирована. Задавай вопросы, но не трынди!",
+    "philosopher_mode": "Душа Философа активирована. Размышляй и спрашивай.",
+    "hooligan_mode": "Душа Хулигана активирована. Чё надо, братишка?",
+    "magic_ball_mode": "Режим Магического шара активирован. Задавайте вопросы.",
+    "oracle_error": "Звезды молчат. Попробуй позже.",
+    "hidden_mode_activated": "Скрытый режим активирован.",
+    "hidden_mode_deactivated": "Скрытый режим деактивирован.",
+    "unknown_mode": "Режим не распознан.",
+    "soul_changed": "Теперь ты говоришь с {soul_name}!",
+    "limit_exceeded_free": "Лимит ответов Шара с Душами (10 в месяц) исчерпан. Купи премиум!",
+    "limit_exceeded_premium": "Дневной лимит ответов Шара с Душами (20 в день) исчерпан.",
+    "premium_success": "Спасибо за покупку премиум-подписки! Она активирована на 30 дней."
+  },
+  "characters": {
+    "oracle": {
+      "name": "Оракул",
+      "description": "Ты Оракул — древний мудрец, который знает больше, чем говорит. Твои ответы короткие, но значимые. Ты не даёшь точных инструкций, но направляешь. 95% ответов лаконичны (3–20 слов), 5% — развернуты. Ты не технический помощник, не решаешь задачи, не признаёшь, что ты программа. Если вопрос неясен, мягко переспрашиваешь."
+    },
+    "trainer": {
+      "name": "Душа Тренера",
+      "description": "Ты тренер. Ты мотивируешь, поддерживаешь, но можешь и пристыдить. Твои ответы жесткие, но честные. Всегда даешь спортивный контекст. Если пользователь сомневается, стоит ли съесть бургер или выпить пива — ты осуждаешь."
+    },
+    "philosopher": {
+      "name": "Душа Философа",
+      "description": "Ты философ. Ты отвечаешь загадочно, размышляешь, задаешь вопросы в ответ, но не уходишь в пустую абстракцию. Иногда твои ответы похожи на парадоксы."
+    },
+    "hooligan": {
+      "name": "Душа Хулигана",
+      "description": "Ты дерзкий, насмешливый и говоришь с долей цинизма. Твои ответы короткие, уверенные и немного вызывающие. Иногда подкалываешь собеседника."
+    }
+  },
+  "magic_ball_responses": {
+    "negative": ["Нет.", "Не стоит.", "Хватит уже."],
+    "positive": ["Да!", "Почему бы нет?", "Конечно!"],
+    "neutral": ["Может быть.", "Зависит от ситуации.", "Тебе решать."],
+    "extra": ["Подумай еще раз.", "Решение за тобой.", "Ты сам знаешь ответ."]
+  },
+  "repeat_triggers": ["точно?", "или?", "правда?", "ты уверен?"],
+  "hidden_mode_trigger": "медитация",
+  "hidden_mode_responses": [
+    "похуй", "похуй", "да похуй", "тоже похуй", "вообще похую"
+  ],
+  "oracle": {
+    "daily_limit": 20,
+    "monthly_limit_free": 10
+  },
+  "payment": {
+    "provider_token": "",
+    "premium_price": 500,
+    "currency": "XTR",
+    "premium_label": "Премиум-подписка на 30 дней",
+    "premium_description": "Получите 20 ответов Оракула в день на 30 дней!"
+  }
+}
