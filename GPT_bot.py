@@ -132,17 +132,23 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     user = database.get_user(user_id)
     if not user:
+        logger.info(f"Пользователь {user_id} не найден, добавляем в базу.")
         database.add_user(user_id, update.message.from_user.username or "unknown")
         user = database.get_user(user_id)
+
+    logger.info(f"Данные пользователя {user_id}: premium={user['premium']}, premium_expires_at={user['premium_expires_at']}")
 
     # Проверяем, активна ли подписка
     current_date = datetime.utcnow().date()
     if user["premium"] and user["premium_expires_at"]:
         # Приводим premium_expires_at к типу date
         expires_at_date = user["premium_expires_at"].date() if isinstance(user["premium_expires_at"], datetime) else user["premium_expires_at"]
+        logger.info(f"Сравнение дат: expires_at_date={expires_at_date}, current_date={current_date}, expires_at_date > current_date={expires_at_date > current_date}")
         if expires_at_date > current_date:
             await update.message.reply_text("У вас уже есть премиум-подписка!")
             return
+    else:
+        logger.info(f"Подписка неактивна: premium={user['premium']}, premium_expires_at={user['premium_expires_at']}")
 
     # Отправляем инвойс для оплаты премиум-подписки в Telegram Stars
     await update.message.reply_invoice(
@@ -182,8 +188,10 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # Активируем премиум-подписку
         if database.activate_premium(user_id):
             await update.message.reply_text(config["messages"]["premium_success"])
+            logger.info(f"Премиум-подписка успешно активирована для пользователя {user_id}")
         else:
             await update.message.reply_text("Ошибка активации премиум-подписки. Попробуйте позже.")
+            logger.error(f"Не удалось активировать премиум-подписку для пользователя {user_id}")
     except Exception as e:
         logger.error(f"Ошибка при обработке платежа: {e}")
         await update.message.reply_text("Произошла ошибка при обработке платежа. Попробуйте позже.")
