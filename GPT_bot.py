@@ -43,8 +43,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Команда /oracle
 async def oracle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["mode"] = "oracle"
+    context.user_data["soul"] = "oracle"
     await update.message.reply_text(config["messages"]["oracle_mode"])
     logger.info(f"Пользователь {update.message.from_user.id} переключился в режим Оракула")
+
+# Команда /trainer
+async def trainer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["mode"] = "oracle"
+    context.user_data["soul"] = "trainer"
+    await update.message.reply_text(config["messages"]["trainer_mode"])
+    logger.info(f"Пользователь {update.message.from_user.id} переключился на Душу Тренера")
+
+# Команда /philosopher
+async def philosopher(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["mode"] = "oracle"
+    context.user_data["soul"] = "philosopher"
+    await update.message.reply_text(config["messages"]["philosopher_mode"])
+    logger.info(f"Пользователь {update.message.from_user.id} переключился на Душу Философа")
+
+# Команда /hooligan
+async def hooligan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["mode"] = "oracle"
+    context.user_data["soul"] = "hooligan"
+    await update.message.reply_text(config["messages"]["hooligan_mode"])
+    logger.info(f"Пользователь {update.message.from_user.id} переключился на Душу Хулигана")
 
 # Команда /magicball
 async def magicball(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -207,6 +229,9 @@ async def set_commands(application):
         commands = [
             BotCommand("start", "Начать работу"),
             BotCommand("oracle", "Переключиться в режим Оракула"),
+            BotCommand("trainer", "Переключиться на Душу Тренера"),
+            BotCommand("philosopher", "Переключиться на Душу Философа"),
+            BotCommand("hooligan", "Переключиться на Душу Хулигана"),
             BotCommand("magicball", "Переключиться в режим Магического шара"),
             BotCommand("premium", "Купить премиум-подписку"),
             # BotCommand("paysupport", "Запросить возврат платежа"),
@@ -233,8 +258,10 @@ def main():
             
             application.add_handler(CommandHandler("start", start))
             application.add_handler(CommandHandler("oracle", oracle))
+            application.add_handler(CommandHandler("trainer", trainer))
+            application.add_handler(CommandHandler("philosopher", philosopher))
+            application.add_handler(CommandHandler("hooligan", hooligan))
             application.add_handler(CommandHandler("magicball", magicball))
-            application.add_handler(CommandHandler("premium", premium))
             application.add_handler(CommandHandler("paysupport", paysupport))
             application.add_handler(CommandHandler("checkstars", check_stars))
             application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
