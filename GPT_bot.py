@@ -122,18 +122,23 @@ async def pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # Обработка успешного платежа
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.successful_payment.user.id  # Исправлено: получаем user_id из successful_payment
-    payment = update.message.successful_payment
-    logger.info(f"Успешный платёж: user_id={user_id}, amount={payment.total_amount}, currency={payment.currency}, charge_id={payment.telegram_payment_charge_id}")
+    try:
+        # Получаем user_id из from_user
+        user_id = update.message.from_user.id
+        payment = update.message.successful_payment
+        logger.info(f"Успешный платёж: user_id={user_id}, amount={payment.total_amount}, currency={payment.currency}, charge_id={payment.telegram_payment_charge_id}")
 
-    # Сохраняем информацию о платеже в базе данных
-    database.log_payment(user_id, payment.total_amount, payment.currency, payment.telegram_payment_charge_id)
+        # Сохраняем информацию о платеже в базе данных
+        database.log_payment(user_id, payment.total_amount, payment.currency, payment.telegram_payment_charge_id)
 
-    # Активируем премиум-подписку
-    if database.activate_premium(user_id):
-        await update.message.reply_text(config["messages"]["premium_success"])
-    else:
-        await update.message.reply_text("Ошибка активации премиум-подписки. Попробуйте позже.")
+        # Активируем премиум-подписку
+        if database.activate_premium(user_id):
+            await update.message.reply_text(config["messages"]["premium_success"])
+        else:
+            await update.message.reply_text("Ошибка активации премиум-подписки. Попробуйте позже.")
+    except Exception as e:
+        logger.error(f"Ошибка при обработке платежа: {e}")
+        await update.message.reply_text("Произошла ошибка при обработке платежа. Попробуйте позже.")
 
 # Обработка callback для покупки премиум (оставляем для совместимости)
 async def handle_premium_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
