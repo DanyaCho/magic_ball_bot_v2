@@ -209,7 +209,7 @@ async def set_commands(application):
             BotCommand("oracle", "Переключиться в режим Оракула"),
             BotCommand("magicball", "Переключиться в режим Магического шара"),
             BotCommand("premium", "Купить премиум-подписку"),
-            BotCommand("paysupport", "Запросить возврат платежа"),
+            # BotCommand("paysupport", "Запросить возврат платежа"),
             BotCommand("checkstars", "Проверить баланс звёзд (для владельца)")
         ]
         await application.bot.set_my_commands(commands)
