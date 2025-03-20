@@ -129,40 +129,45 @@ async def generate_oracle_response(question, context):
 
 # Команда /premium
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    user = database.get_user(user_id)
-    if not user:
-        logger.info(f"Пользователь {user_id} не найден, добавляем в базу.")
-        database.add_user(user_id, update.message.from_user.username or "unknown")
+    try:
+        logger.info(f"Команда /premium вызвана для пользователя {update.message.from_user.id}")
+        user_id = update.message.from_user.id
         user = database.get_user(user_id)
+        if not user:
+            logger.info(f"Пользователь {user_id} не найден, добавляем в базу.")
+            database.add_user(user_id, update.message.from_user.username or "unknown")
+            user = database.get_user(user_id)
 
-    logger.info(f"Данные пользователя {user_id}: premium={user['premium']}, premium_expires_at={user['premium_expires_at']}")
+        logger.info(f"Данные пользователя {user_id}: premium={user['premium']}, premium_expires_at={user['premium_expires_at']}")
 
-    # Проверяем, активна ли подписка
-    current_date = datetime.utcnow().date()
-    if user["premium"] and user["premium_expires_at"]:
-        # Приводим premium_expires_at к типу date
-        expires_at_date = user["premium_expires_at"].date() if isinstance(user["premium_expires_at"], datetime) else user["premium_expires_at"]
-        logger.info(f"Сравнение дат: expires_at_date={expires_at_date}, current_date={current_date}, expires_at_date > current_date={expires_at_date > current_date}")
-        if expires_at_date > current_date:
-            await update.message.reply_text("У вас уже есть премиум-подписка!")
-            return
-    else:
-        logger.info(f"Подписка неактивна: premium={user['premium']}, premium_expires_at={user['premium_expires_at']}")
+        # Проверяем, активна ли подписка
+        current_date = datetime.utcnow().date()
+        if user["premium"] and user["premium_expires_at"]:
+            # Приводим premium_expires_at к типу date
+            expires_at_date = user["premium_expires_at"].date() if isinstance(user["premium_expires_at"], datetime) else user["premium_expires_at"]
+            logger.info(f"Сравнение дат: expires_at_date={expires_at_date}, current_date={current_date}, expires_at_date > current_date={expires_at_date > current_date}")
+            if expires_at_date > current_date:
+                await update.message.reply_text("У вас уже есть премиум-подписка!")
+                return
+        else:
+            logger.info(f"Подписка неактивна: premium={user['premium']}, premium_expires_at={user['premium_expires_at']}")
 
-    # Отправляем инвойс для оплаты премиум-подписки в Telegram Stars
-    await update.message.reply_invoice(
-        title=config["payment"]["premium_label"],
-        description=config["payment"]["premium_description"],
-        payload="premium_subscription_30_days",  # Уникальный идентификатор покупки
-        provider_token=config["payment"]["provider_token"],  # Пустой для XTR
-        currency=config["payment"]["currency"],  # XTR для Telegram Stars
-        prices=[LabeledPrice(config["payment"]["premium_label"], config["payment"]["premium_price"])],
-        need_email=False,
-        need_phone_number=False,
-        need_shipping_address=False,
-        is_flexible=False
-    )
+        # Отправляем инвойс для оплаты премиум-подписки в Telegram Stars
+        await update.message.reply_invoice(
+            title=config["payment"]["premium_label"],
+            description=config["payment"]["premium_description"],
+            payload="premium_subscription_30_days",  # Уникальный идентификатор покупки
+            provider_token=config["payment"]["provider_token"],  # Пустой для XTR
+            currency=config["payment"]["currency"],  # XTR для Telegram Stars
+            prices=[LabeledPrice(config["payment"]["premium_label"], config["payment"]["premium_price"])],
+            need_email=False,
+            need_phone_number=False,
+            need_shipping_address=False,
+            is_flexible=False
+        )
+    except Exception as e:
+        logger.error(f"Ошибка в функции premium: {e}")
+        await update.message.reply_text("Произошла ошибка при обработке команды /premium. Попробуйте позже.")
 
 # Обработка предпроверки платежа
 async def pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -258,10 +263,11 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Основной запуск бота
 def main():
+    logger.info("Запуск бота начат")
     while True:
         application = None
         try:
-            logger.info("Запуск бота...")
+            logger.info("Создаём Application...")
             application = Application.builder().token(BOT_TOKEN).post_init(set_commands).build()
             
             application.add_handler(CommandHandler("start", start))
@@ -275,6 +281,7 @@ def main():
             application.add_handler(CallbackQueryHandler(handle_premium_callback, pattern='^buy_premium$'))
             application.add_handler(PreCheckoutQueryHandler(pre_checkout_query))
             application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+            application.add_handler(CommandHandler("premium", premium))
             application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
             application.add_error_handler(error_handler)
             
