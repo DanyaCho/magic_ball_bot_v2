@@ -2,20 +2,26 @@
   "commands": [
     {"command": "start", "description": "Запустить бота"},
     {"command": "oracle", "description": "Режим Оракула"},
+    {"command": "trainer", "description": "Переключиться на Душу Тренера"},
+    {"command": "philosopher", "description": "Переключиться на Душу Философа"},
+    {"command": "hooligan", "description": "Переключиться на Душу Хулигана"},
     {"command": "magicball", "description": "Режим Магического шара"},
     {"command": "premium", "description": "Купить премиум-подписку"}
   ],
   "messages": {
     "start": "Привет! Выберите режим: Оракул или Магический шар.",
     "oracle_mode": "Режим Оракула активирован. Задавайте вопросы.",
+    "trainer_mode": "Душа Тренера активирована. Задавай вопросы, но не трынди!",
+    "philosopher_mode": "Душа Философа активирована. Размышляй и спрашивай.",
+    "hooligan_mode": "Душа Хулигана активирована. Чё надо, братишка?",
     "magic_ball_mode": "Режим Магического шара активирован. Задавайте вопросы.",
     "oracle_error": "Звезды молчат. Попробуй позже.",
     "hidden_mode_activated": "Скрытый режим активирован.",
     "hidden_mode_deactivated": "Скрытый режим деактивирован.",
     "unknown_mode": "Режим не распознан.",
     "soul_changed": "Теперь ты говоришь с {soul_name}!",
-    "limit_exceeded_free": "Лимит ответов Оракула (10 в месяц) исчерпан. Купи премиум!",
-    "limit_exceeded_premium": "Дневной лимит ответов Оракула (20 в день) исчерпан.",
+    "limit_exceeded_free": "Лимит ответов Шара с Душами (10 в месяц) исчерпан. Купи премиум!",
+    "limit_exceeded_premium": "Дневной лимит ответов Шара с Душами (20 в день) исчерпан.",
     "premium_success": "Спасибо за покупку премиум-подписки! Она активирована на 30 дней."
   },
   "characters": {
@@ -47,6 +53,10 @@
   "hidden_mode_responses": [
     "похуй", "похуй", "да похуй", "тоже похуй", "вообще похую"
   ],
+  "oracle": {
+    "daily_limit": 20,
+    "monthly_limit_free": 10
+  },
   "payment": {
     "provider_token": "",
     "premium_price": 500,
