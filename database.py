@@ -140,6 +140,7 @@ def log_message(telegram_id, message_text, response_text, mode):
 def log_payment(telegram_id, amount, currency, charge_id):
     conn = get_db_connection()
     if not conn:
+        logger.error("Не удалось подключиться к базе данных для записи платежа.")
         return
 
     try:
@@ -188,8 +189,10 @@ def reset_limits_if_needed(telegram_id):
                     )
 
                 # Сброс дневного лимита для премиум
-                if premium and (not premium_reset or premium_reset != today):
-                    daily_left = 20 if (not expires_at or expires_at > today) else 0
+                if premium and (not premium_reset or premium_reset.date() != today):
+                    # Приводим expires_at к datetime.date, если это datetime.datetime
+                    expires_at_date = expires_at.date() if isinstance(expires_at, datetime) else expires_at
+                    daily_left = 20 if (not expires_at_date or expires_at_date > today) else 0
                     cur.execute(
                         "UPDATE users SET oracle_daily_answers_left = %s, premium_reset_at = %s WHERE telegram_id = %s",
                         (daily_left, today, telegram_id)
@@ -232,7 +235,10 @@ def check_and_decrement_oracle_limit(telegram_id, username, config):
 
                 if not premium and monthly_left <= 0:
                     return False, config["messages"]["limit_exceeded_free"]
-                elif premium and (expires_at and expires_at < today):
+                
+                # Приводим expires_at к datetime.date, если это datetime.datetime
+                expires_at_date = expires_at.date() if isinstance(expires_at, datetime) else expires_at
+                if premium and (expires_at_date and expires_at_date < today):
                     return False, "Ваша премиум-подписка истекла."
                 elif premium and daily_left <= 0:
                     return False, config["messages"]["limit_exceeded_premium"]
@@ -244,8 +250,8 @@ def check_and_decrement_oracle_limit(telegram_id, username, config):
                     )
                 cur.execute(
                     "UPDATE users SET oracle_monthly_answers_left = oracle_monthly_answers_left - 1 WHERE telegram_id = %s",
-                    (telegram_id,)
-                )
+                        (telegram_id,)
+                    )
                 return True, ""
     except psycopg2.Error as e:
         logger.error(f"Ошибка при проверке лимита для {telegram_id}: {e}")
@@ -257,6 +263,7 @@ def check_and_decrement_oracle_limit(telegram_id, username, config):
 def activate_premium(telegram_id, days=30):
     conn = get_db_connection()
     if not conn:
+        logger.error("Не удалось подключиться к базе данных для активации премиум.")
         return False
 
     try:
