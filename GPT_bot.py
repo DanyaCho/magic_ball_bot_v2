@@ -113,9 +113,14 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         database.add_user(user_id, update.message.from_user.username or "unknown")
         user = database.get_user(user_id)
 
-    if user["premium"] and user["premium_expires_at"] and user["premium_expires_at"] > datetime.utcnow().date():
-        await update.message.reply_text("У вас уже есть премиум-подписка!")
-        return
+    # Проверяем, активна ли подписка
+    current_date = datetime.utcnow().date()
+    if user["premium"] and user["premium_expires_at"]:
+        # Приводим premium_expires_at к типу date
+        expires_at_date = user["premium_expires_at"].date() if isinstance(user["premium_expires_at"], datetime) else user["premium_expires_at"]
+        if expires_at_date > current_date:
+            await update.message.reply_text("У вас уже есть премиум-подписка!")
+            return
 
     # Отправляем инвойс для оплаты премиум-подписки в Telegram Stars
     await update.message.reply_invoice(
