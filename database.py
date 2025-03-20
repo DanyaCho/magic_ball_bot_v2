@@ -243,13 +243,17 @@ def check_and_decrement_oracle_limit(telegram_id, username, config):
                 elif premium and daily_left <= 0:
                     return False, config["messages"]["limit_exceeded_premium"]
 
+                # Уменьшаем лимиты в зависимости от статуса подписки
                 if premium:
+                    # Для премиум-пользователей уменьшаем только дневной лимит
                     cur.execute(
                         "UPDATE users SET oracle_daily_answers_left = oracle_daily_answers_left - 1 WHERE telegram_id = %s",
                         (telegram_id,)
                     )
-                cur.execute(
-                    "UPDATE users SET oracle_monthly_answers_left = oracle_monthly_answers_left - 1 WHERE telegram_id = %s",
+                else:
+                    # Для бесплатных пользователей уменьшаем только месячный лимит
+                    cur.execute(
+                        "UPDATE users SET oracle_monthly_answers_left = oracle_monthly_answers_left - 1 WHERE telegram_id = %s",
                         (telegram_id,)
                     )
                 return True, ""
