@@ -1,7 +1,7 @@
 import logging
 import psycopg2
 from psycopg2.extras import DictCursor
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from dotenv import load_dotenv
 import os
 
@@ -264,24 +264,34 @@ def check_and_decrement_oracle_limit(telegram_id, username, config):
         conn.close()
 
 # Активация премиум с указанием срока
-def activate_premium(telegram_id, days=30):
+def activate_premium(telegram_id):
     conn = get_db_connection()
-    if not conn:
-        logger.error("Не удалось подключиться к базе данных для активации премиум.")
-        return False
-
     try:
         with conn:
             with conn.cursor() as cur:
-                expires_at = datetime.utcnow().date() + timedelta(days=days)
+                # Проверяем, есть ли пользователь
+                cur.execute("SELECT premium, premium_expires_at FROM users WHERE telegram_id = %s", (telegram_id,))
+                user = cur.fetchone()
+                if not user:
+                    return False
+
+                # Устанавливаем премиум на 30 дней (только дата)
+                new_expiry = (datetime.utcnow() + timedelta(days=30)).date()
+                if user["premium"] and user["premium_expires_at"]:
+                    # Если подписка уже активна, добавляем 30 дней к текущей дате окончания
+                    current_expiry = user["premium_expires_at"]
+                    if isinstance(current_expiry, datetime):
+                        current_expiry = current_expiry.date()
+                    if current_expiry > datetime.utcnow().date():
+                        new_expiry = (current_expiry + timedelta(days=30))
+
                 cur.execute(
-                    "UPDATE users SET premium = TRUE, premium_expires_at = %s, oracle_daily_answers_left = 20, premium_reset_at = %s WHERE telegram_id = %s",
-                    (expires_at, datetime.utcnow().date(), telegram_id)
+                    "UPDATE users SET premium = TRUE, premium_expires_at = %s WHERE telegram_id = %s",
+                    (new_expiry, telegram_id)
                 )
-                logger.info(f"Премиум активирован для пользователя {telegram_id} до {expires_at}")
                 return True
-    except psycopg2.Error as e:
-        logger.error(f"Ошибка при активации премиум для {telegram_id}: {e}")
+    except Exception as e:
+        logger.error(f"Ошибка при активации премиум-подписки: {e}")
         return False
     finally:
         conn.close()
