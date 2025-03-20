@@ -49,7 +49,7 @@
   ],
   "payment": {
     "provider_token": "",
-    "premium_price": 50,
+    "premium_price": 500,
     "currency": "XTR",
     "premium_label": "Премиум-подписка на 30 дней",
     "premium_description": "Получите 20 ответов Оракула в день на 30 дней!"
