@@ -122,8 +122,8 @@ async def pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 # Обработка успешного платежа
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.successful_payment.user.id
-    payment = update.message.from_user.successful_payment
+    user_id = update.message.successful_payment.user.id  # Исправлено: получаем user_id из successful_payment
+    payment = update.message.successful_payment
     logger.info(f"Успешный платёж: user_id={user_id}, amount={payment.total_amount}, currency={payment.currency}, charge_id={payment.telegram_payment_charge_id}")
 
     # Сохраняем информацию о платеже в базе данных
